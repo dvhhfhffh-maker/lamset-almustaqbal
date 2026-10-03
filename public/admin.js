@@ -123,6 +123,39 @@
     }
   });
   $$('[data-json-input]').forEach(field => field.addEventListener('input', () => field.setCustomValidity('')));
+  const statistics = $('[data-statistics-editor]');
+  if (statistics) {
+    const rows = $('[data-statistics-rows]', statistics);
+    const json = $('[data-statistics-json]', statistics);
+    const template = $('[data-stat-template]', statistics);
+    const syncStatistics = () => {
+      const values = $('[data-statistics-row]', rows).map(row => ({
+        label: $('[data-stat-label]', row).value.trim(),
+        value: Number($('[data-stat-value]', row).value || 0),
+        suffix: $('[data-stat-suffix]', row).value.trim()
+      })).filter(stat => stat.label);
+      json.value = JSON.stringify(values, null, 2);
+      json.setCustomValidity('');
+    };
+    rows.addEventListener('input', syncStatistics);
+    statistics.addEventListener('click', event => {
+      if (event.target.closest('[data-add-stat]')) {
+        if ($('[data-statistics-row]', rows).length >= 8) {
+          toast('يمكن إضافة ثماني إحصائيات كحد أقصى.', true);
+          return;
+        }
+        const fragment = template.content.cloneNode(true);
+        rows.appendChild(fragment);
+        rows.lastElementChild.querySelector('input').focus();
+        syncStatistics();
+      }
+      const remove = event.target.closest('[data-remove-stat]');
+      if (remove) {
+        remove.closest('[data-statistics-row]').remove();
+        syncStatistics();
+      }
+    });
+  }
   const sortable = $('[data-sortable]');
   const saveOrder = $('[data-save-order]');
   if (sortable && saveOrder) {
