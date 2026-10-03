@@ -266,7 +266,9 @@ test('administrator can upload, create, edit and delete a project through the da
   await page.locator('[name="image"]').setInputFiles({ name: 'project.png', mimeType: 'image/png', buffer: samplePhoto });
   await page.locator('[name="enabled"]').check();
   await page.getByRole('button', { name: 'حفظ التغييرات', exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/projects/);
+  await expect(page).toHaveURL(/\/admin\/projects\/[^/]+\/edit/);
+  const createdId = new URL(page.url()).pathname.split('/')[3];
+  (page.__cleanupRecords ||= []).push({ collection: 'projects', id: createdId });
   await page.goto('/admin/projects');
   const row = page.locator('[data-record-row]').filter({ hasText: title });
   await expect(row).toBeVisible();
@@ -280,6 +282,7 @@ test('administrator can upload, create, edit and delete a project through the da
   page.once('dialog', dialog => dialog.accept());
   await edited.getByRole('button', { name: 'حذف', exact: true }).click();
   await expect(page.locator('[data-record-row]').filter({ hasText: title })).toHaveCount(0);
+  page.__cleanupRecords = page.__cleanupRecords.filter(record => record.id !== createdId);
   expect((await page.context().request.get('/projects/' + slug)).status()).toBe(404);
 });
 
