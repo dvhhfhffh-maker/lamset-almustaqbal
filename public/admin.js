@@ -16,7 +16,12 @@
   const backdrop = $('[data-menu-close]');
   const setMenu = open => {
     if (!menu || !menuToggle || !backdrop) return;
+    const wasOpen = menu.classList.contains('is-open');
     menu.classList.toggle('is-open', open);
+    menu.inert = !open && window.innerWidth <= 800;
+    menu.setAttribute('aria-hidden', String(!open && window.innerWidth <= 800));
+    if (open) setTimeout(() => $('a', menu)?.focus(), 0);
+    else if (wasOpen) menuToggle.focus();
     menuToggle.setAttribute('aria-expanded', String(open));
     menuToggle.setAttribute('aria-label', open ? 'إغلاق القائمة' : 'فتح القائمة');
     backdrop.hidden = !open;
@@ -24,7 +29,17 @@
   };
   if (menuToggle) menuToggle.addEventListener('click', () => setMenu(menuToggle.getAttribute('aria-expanded') !== 'true'));
   if (backdrop) backdrop.addEventListener('click', () => setMenu(false));
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') setMenu(false); });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setMenu(false);
+    if (event.key === 'Tab' && menu?.classList.contains('is-open')) {
+      const controls = $('a,button,input:not([type=hidden]),select,textarea', menu).filter(item => !item.disabled);
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+  });
+  if (menu) setMenu(false);
   window.addEventListener('resize', () => { if (window.innerWidth > 800) setMenu(false); });
   $$('[data-password-toggle]').forEach(button => {
     button.addEventListener('click', () => {
