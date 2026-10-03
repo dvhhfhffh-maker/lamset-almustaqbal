@@ -151,7 +151,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     if(!res.locals.settings) {
       Object.assign(res.locals,publicData(db),{item:null,schema:[],canonical:'',description:'',pageImage:'',keywords:'',flash:'',errors:[],formValues:{},requestPath:req.path});
       const settings=res.locals.settings;
-      res.locals.waUrl='https://wa.me/'+String(settings.whatsapp||'966501308295').replace(/\\D/g,'')+'?text='+encodeURIComponent(settings.whatsappMessage||whatsappMessage);
+      res.locals.waUrl='https://wa.me/'+String(settings.whatsapp||'966501308295').replace(/\D/g,'')+'?text='+encodeURIComponent(settings.whatsappMessage||whatsappMessage);
       res.locals.telUrl='tel:'+phoneValue(settings.phone||'+966501308295');
     }
     if(!req.session)sessions.issue(req,res);
