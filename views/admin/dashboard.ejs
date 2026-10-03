@@ -1,0 +1,14 @@
+<%- include('partials/header', { pageTitle: 'نظرة عامة' }) %>
+<% const totals = typeof counts !== 'undefined' && counts ? counts : {}; %>
+<div class="page-heading"><div><p class="eyebrow">كل شيء في مكان واحد</p><h1>نظرة عامة</h1><p class="muted">أعمالك، محتواك، وطلبات عملائك. أدر موقعك بسهولة.</p></div><a class="button button-outline" href="/" target="_blank" rel="noopener">معاينة الموقع <span aria-hidden="true">↗</span></a></div>
+<section class="dashboard-welcome"><div><span class="small-tag">لمسة المستقبل</span><h2>التفاصيل الصغيرة تصنع<br>الانطباع الكبير.</h2><p>حدّث صور أعمالك ومعلوماتك ليجد العميل ما يبحث عنه.</p><a class="button button-light" href="/admin/settings">إعدادات الموقع <span aria-hidden="true">←</span></a></div><div class="welcome-art" aria-hidden="true"><div></div><div></div><div></div></div></section>
+<div class="metric-grid">
+<% (typeof collections !== 'undefined' ? collections : []).slice(0, 6).forEach((item, index) => { %>
+<a class="metric-card" href="/admin/<%= encodeURIComponent(item.key) %>"><span class="metric-icon" aria-hidden="true"><%= ['◈','◇','▧','▤','☆','◎'][index] %></span><span class="metric-number"><%= Number(totals[item.key] || 0).toLocaleString('ar-SA') %></span><span class="metric-label"><%= item.label %></span><span class="metric-link">إدارة المحتوى ←</span></a>
+<% }); %>
+</div>
+<div class="two-column">
+<section class="panel"><div class="panel-heading"><h2>طلبات العملاء</h2><a class="text-link" href="/admin/requests">عرض الطلبات ←</a></div><div class="request-summary"><div><strong><%= Number(totals.quotes || (typeof quotes !== 'undefined' ? quotes : 0) || 0).toLocaleString('ar-SA') %></strong><span>طلبات عرض سعر</span></div><div><strong><%= Number(totals.contacts || (typeof contacts !== 'undefined' ? contacts : 0) || 0).toLocaleString('ar-SA') %></strong><span>رسائل التواصل</span></div></div><p class="muted">راجع تفاصيل كل طلب وصوره، ثم حدّث حالته بعد التواصل.</p></section>
+<section class="panel"><div class="panel-heading"><h2>خطوات سريعة</h2></div><div class="quick-links"><% (typeof collections !== 'undefined' ? collections : []).filter(item => ['projects','slider','blog'].includes(item.key)).forEach(item => { %><a href="/admin/<%= item.key %>/new"><span>إضافة <%= item.label %></span><span aria-hidden="true">＋</span></a><% }); %><a href="/admin/settings"><span>تحديث أرقام التواصل</span><span aria-hidden="true">←</span></a></div></section>
+</div>
+<%- include('partials/footer') %>
