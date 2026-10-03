@@ -26,12 +26,16 @@ export function createDatabase(path = process.env.DATABASE_PATH || './data/site.
   }
   function getSettings() {
     const settings=Object.fromEntries(sqlite.prepare('SELECT key,value FROM Settings').all().map(row => [row.key, parse(row.value)]));
+    settings.businessName=settings.siteName||settings.businessName||settings.name||'لمسة المستقبل';
+    settings.siteName=settings.businessName;
     settings.stats=settings.statistics=Array.isArray(settings.statistics)?settings.statistics:(settings.stats||[]);
     settings.mapsUrl=settings.mapUrl=settings.mapUrl||settings.mapsUrl||'';
     return settings;
   }
   function saveSettings(settings) {
     settings={...settings};
+    if(Object.hasOwn(settings,'businessName'))settings.siteName=settings.businessName;
+    else if(Object.hasOwn(settings,'siteName'))settings.businessName=settings.siteName;
     if(Object.hasOwn(settings,'stats'))settings.statistics=settings.stats;
     else if(Object.hasOwn(settings,'statistics'))settings.stats=settings.statistics;
     if(Object.hasOwn(settings,'mapsUrl'))settings.mapUrl=settings.mapsUrl;
