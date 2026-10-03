@@ -47,7 +47,12 @@ class Client {
 
   async login() {
     const token = await this.token('/admin/login');
+    const previousSession = this.cookies.get('lm.sid');
     const response = await this.post('/admin/login', account, token);
+    const cookie = response.headers.getSetCookie().find(value => value.startsWith('lm.sid='));
+    assert.match(cookie || '', /HttpOnly/);
+    assert.match(cookie || '', /SameSite=Lax/i);
+    assert.notEqual(this.cookies.get('lm.sid'), previousSession, 'Login must rotate the anonymous session');
     assert.ok([302, 303].includes(response.status), 'Valid credentials should start a session');
     assert.match(response.headers.get('location') || '', /^\/admin/);
     return this.token('/admin/projects/new');
@@ -125,7 +130,7 @@ test('Arabic public routes and all service detail pages expose accessible SEO co
     assert.ok(response.headers.get('content-security-policy')?.includes('script-src'));
   }
   const home = await (await client.request('/')).text();
-  assert.ok(schemas(home).some(item => item['@type'] === 'LocalBusiness'));
+  assert.ok(schemas(home).some(item => [item['@type']].flat().some(type => ['LocalBusiness', 'HomeAndConstructionBusiness'].includes(type))));
   assert.equal(app.locals.db.getSettings().statsEnabled, false, 'Unverified business statistics must stay hidden by default');
   const detail = await (await client.request('/services/interior-painting-riyadh')).text();
   assert.ok(schemas(detail).some(item => item['@type'] === 'Service'));
@@ -167,12 +172,12 @@ test('admin authentication protects reads and writes; wrong passwords do not sta
     method: 'POST', body: multipart({ title: 'فحص حماية', enabled: '1' }, 'invalid-csrf'),
   });
   assert.equal(protectedWrite.status, 403);
-  const cookies = dashboard.headers.getSetCookie().join('; ');
-  // The login response and subsequent requests retain a server session; the browser suite also checks logout.
-  assert.ok(client.cookies.has('lm.sid'), 'Authentication must use a server session cookie');
+    assert.ok(client.cookies.has('lm.sid'), 'Authentication must use a server session cookie');
   assert.ok(validToken.length >= 16);
   assert.equal(app.locals.db.list('projects').some(project => project.title === 'فحص حماية'), false);
-  void cookies;
+  const logout = await client.post('/admin/logout', {}, validToken);
+  assert.ok([302, 303].includes(logout.status));
+  assert.ok([302, 303].includes((await client.request('/admin')).status));
 });
 
 test('CSRF and validation reject forged contact and quote requests before persistence', async () => {
@@ -182,6 +187,8 @@ test('CSRF and validation reject forged contact and quote requests before persis
   assert.equal(forged.status, 403);
   const missing = await client.request('/quote', { method: 'POST', body: new URLSearchParams({ name: 'عميل' }) });
   assert.equal(missing.status, 403);
+  const crossOrigin = await client.request('/contact', { method: 'POST', headers: { Origin: 'https://unrelated.example.test' }, body: new URLSearchParams({ name: 'عميل', phone: '0501308295', message: 'استفسار عن دهانات الرياض', _csrf: contactToken }) });
+  assert.equal(crossOrigin.status, 403);
   const invalid = await client.post('/contact', { name: '', phone: 'not-a-phone', message: '' }, contactToken);
   assert.equal(invalid.status, 422);
   assert.equal(app.locals.db.listRequests('contacts').length, 0);
@@ -200,10 +207,11 @@ test('contact requests persist safely and HTML is escaped when read by an admini
   assert.equal(requests[0].data.name, 'اختبار العميل');
   const admin = new Client();
   await admin.login();
-  const inbox = await admin.request('/admin/requests?type=contacts');
+  const inbox = await admin.request('/admin/requests/contacts/' + requests[0].id);
   assert.equal(inbox.status, 200);
   const html = await inbox.text();
   assert.doesNotMatch(html, /<script>alert\("xss"\)<\/script>/);
+  assert.match(html, /&lt;script&gt;/);
 });
 
 test('quote requests store all submitted details and validated photos are private', async () => {
@@ -248,6 +256,18 @@ test('upload validation rejects MIME spoofing and SVG content without saving a r
     form.append('photos', new Blob([content], { type }), name);
     assert.equal((await client.request('/quote', { method: 'POST', body: form })).status, 422);
   }
+  const mixed = multipart(values, token);
+  mixed.append('photos', new Blob([await image()], { type: 'image/png' }), 'valid.png');
+  mixed.append('photos', new Blob(['invalid-image'], { type: 'image/png' }), 'fake.png');
+  assert.equal((await client.request('/quote', { method: 'POST', body: mixed })).status, 422);
+  assert.equal(app.locals.db.listRequests('quotes').length, 0);
+  assert.deepEqual(await readdir(join(workspace, 'uploads', 'requests')), [], 'A failed batch must remove previously processed photos');
+  const oversized = multipart(values, token);
+  oversized.append('photos', new Blob([new Uint8Array(5 * 1024 * 1024 + 1)], { type: 'image/png' }), 'large.png');
+  assert.equal((await client.request('/quote', { method: 'POST', body: oversized })).status, 413);
+  const excessive = multipart(values, token);
+  for (let index = 0; index < 7; index += 1) excessive.append('photos', new Blob([await image()], { type: 'image/png' }), 'photo-' + index + '.png');
+  assert.equal((await client.request('/quote', { method: 'POST', body: excessive })).status, 422);
   assert.equal(app.locals.db.listRequests('quotes').length, 0);
 });
 
@@ -257,7 +277,7 @@ test('authenticated project create, upload, edit and delete are reflected on pub
   const form = multipart({
     title: 'مشروع اختبار مستقل', slug: 'integration-project', description: 'تجديد غرفة واختبار معرض الصور',
     enabled: '1', area: 'الرياض', district: 'الياسمين', tags: 'دهانات,شقق', service: 'دهانات داخلية',
-    projectDate: '2026-01-15', dataJSON: JSON.stringify({ isDemo: true }),
+    projectDate: '2026-01-15', dataJSON: JSON.stringify({ demo: true }),
   }, token);
   form.append('image', new Blob([await image()], { type: 'image/png' }), 'cover.png');
   form.append('images', new Blob([await image()], { type: 'image/png' }), 'gallery.png');
@@ -265,7 +285,7 @@ test('authenticated project create, upload, edit and delete are reflected on pub
   assert.ok([302, 303].includes(created.status), 'Project should save');
   let project = app.locals.db.list('projects').find(record => record.slug === 'integration-project');
   assert.ok(project);
-  assert.match(project.imageUrl, /^\/uploads\/media\/[^/]+\.webp$/);
+  assert.match(project.image, /^\/uploads\/media\/[^/]+\.webp$/);
   const publicImage = await new Client().request(project.imageUrl);
   assert.equal(publicImage.status, 200);
   assert.match(publicImage.headers.get('content-type'), /image\/webp/);
@@ -276,7 +296,7 @@ test('authenticated project create, upload, edit and delete are reflected on pub
     method: 'POST',
     body: multipart({
       id: project.id, title: 'مشروع بعد التعديل', slug: project.slug, description: project.description,
-      imageUrl: project.imageUrl, enabled: '1', dataJSON: JSON.stringify(project.data || {}),
+      imageUrl: project.image, enabled: '1', dataJSON: JSON.stringify(project.data || {}),
     }, token),
   });
   assert.ok([302, 303].includes(changed.status));
