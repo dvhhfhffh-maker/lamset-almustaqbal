@@ -35,7 +35,7 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
     res.render('admin/login',{email:'',title:'دخول الإدارة',hasAdmin:db.countUsers()>0});
   });
   router.post('/login',loginLimit,sessions.csrf,async(req,res)=>{
-    const email=textValue(req.body.email,254).toLowerCase(),password=textValue(req.body.password,256);
+    const email=textValue(req.body.email,254).toLowerCase(),password=typeof req.body.password==='string'?req.body.password.slice(0,256):'';
     const user=db.getUserByEmail(email);
     const valid=await bcrypt.compare(password,user?.passwordHash||dummyHash);
     if(!valid||!user||user.role!=='admin')return res.status(401).render('admin/login',{email,title:'دخول الإدارة',hasAdmin:db.countUsers()>0,errors:['البريد الإلكتروني أو كلمة المرور غير صحيحة.']});
@@ -54,14 +54,18 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
     const uploaded=[];
     try {
       const settings={...db.getSettings(),...cleanSettings(objectJSON(req.body.settingsJSON,'الإعدادات'))};
-      const strings=['businessName','name','siteName','siteUrl','phone','whatsapp','email','description','heroTitle','heroSubtitle','heroDescription','logo','favicon','metaTitle','metaDescription','ogImage','accentColor','address','mapsUrl'];
+      const strings=['businessName','name','siteName','siteUrl','phone','whatsapp','email','description','heroTitle','heroSubtitle','heroDescription','logo','favicon','metaTitle','metaDescription','ogImage','accentColor','address','mapUrl','mapsUrl','officialStreetAddress'];
       for(const key of strings)if(typeof req.body[key]==='string')settings[key]=textValue(req.body[key],['description','metaDescription','heroDescription'].includes(key)?2500:1000);
-      for(const key of ['logo','favicon','ogImage','mapsUrl'])settings[key]=safeUrl(settings[key]);
+      for(const key of ['logo','favicon','ogImage','mapsUrl','mapUrl'])settings[key]=safeUrl(settings[key]);
+      if(typeof req.body.businessName==='string')settings.siteName=settings.businessName;
+      else if(typeof req.body.siteName==='string')settings.businessName=settings.siteName;
+      if(typeof req.body.mapUrl==='string')settings.mapsUrl=settings.mapUrl;
+      else if(typeof req.body.mapsUrl==='string')settings.mapUrl=settings.mapsUrl;
       if(settings.siteUrl) {
         const site=safeUrl(settings.siteUrl);if(!site||site.startsWith('/'))throw new HttpError(422,'رابط الموقع يجب أن يبدأ بـ https://');settings.siteUrl=site.replace(/\/$/,'');
       }
       if(!/^#[a-fA-F0-9]{6}$/.test(settings.accentColor||''))settings.accentColor='#B69B6A';
-      if(Object.hasOwn(req.body,'stats')&&req.body.stats.trim()) {const parsed=JSON.parse(req.body.stats);if(!Array.isArray(parsed))throw new HttpError(422,'الإحصائيات يجب أن تكون قائمة JSON.');settings.stats=parsed;}
+      if(Object.hasOwn(req.body,'stats')&&req.body.stats.trim()) {const parsed=JSON.parse(req.body.stats);if(!Array.isArray(parsed))throw new HttpError(422,'الإحصائيات يجب أن تكون قائمة JSON.');settings.stats=settings.statistics=parsed;}
       if(Object.hasOwn(req.body,'socialLinks')&&req.body.socialLinks.trim())settings.socialLinks=objectJSON(req.body.socialLinks,'روابط التواصل');
       settings.statsEnabled=checked(req.body.statsEnabled);
       for(const [field,key] of [['logoUpload','logo'],['faviconUpload','favicon'],['shareUpload','ogImage']])if(req.files?.[field]?.length) {
@@ -117,24 +121,31 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       const title=textValue(req.body.title,200),slug=textValue(req.body.slug,180);
       if(title.length<2||!slug||!/^[-_a-zA-Z0-9\u0600-\u06ff]+$/.test(slug))throw new HttpError(422,'أدخل عنوانًا ورابطًا صالحًا دون مسافات.');
       const data={...old?.data,...objectJSON(req.body.dataJSON,'بيانات العنصر')};
-      const fields=['content','area','district','service','projectDate','buttonLabel','author','seoTitle','metaDescription','clientName','propertyType','alt'];
+      const fields=['content','area','district','service','projectDate','buttonLabel','author','seoTitle','metaDescription','clientName','propertyType','alt','category','path','date'];
       for(const field of fields)if(typeof req.body[field]==='string')data[field]=textValue(req.body[field],field==='content'?100000:3000);
       for(const field of ['buttonUrl','beforeImageUrl','afterImageUrl'])if(typeof req.body[field]==='string')data[field]=field==='buttonUrl'?safeLink(req.body[field]):safeUrl(req.body[field]);
-      if(req.body.beforeImageUrl!==undefined)data.before=data.beforeImageUrl;
-      if(req.body.afterImageUrl!==undefined)data.after=data.afterImageUrl;
+      if(req.body.beforeImageUrl!==undefined)data.before=data.beforeImage=data.beforeImageUrl;
+      if(req.body.afterImageUrl!==undefined)data.after=data.afterImage=data.afterImageUrl;
       for(const field of ['tags','keywords'])if(typeof req.body[field]==='string')data[field]=req.body[field].split(/[,،\n]/).map(value=>textValue(value,100)).filter(Boolean).slice(0,30);
       if(req.body.duration!==undefined)data.duration=Math.min(20000,Math.max(4000,Number(req.body.duration)||5000));
       if(req.body.rating!==undefined)data.rating=Math.min(5,Math.max(1,Number(req.body.rating)||5));
       if(req.body.galleryUrls!==undefined)data.gallery=req.body.galleryUrls.split(/\n/).map(line=>safeUrl(line)).filter(Boolean).slice(0,40);
-      let image=safeUrl(req.body.imageUrl??old?.image);
+      let image=safeUrl(req.body.imageUrl??req.body.image??old?.image);
+      if(req.body.projectDate!==undefined)data.date=data.projectDate;
+      if(req.body.buttonLabel!==undefined)data.buttonText=data.buttonLabel;
+      for(const flag of ['featured','demo'])if(req.body.manageFlags==='1'||req.body[flag]!==undefined)data[flag]=checked(req.body[flag]);
       for(const [field,key] of [['image','image'],['beforeImage','before'],['afterImage','after'],['images','gallery']])if(req.files?.[field]?.length) {
         const saved=await processImages(req.files[field],uploadsDir);uploaded.push(...saved);
         if(key==='image')image=saved[0].url;
-        else if(key==='gallery')data.gallery=[...(Array.isArray(data.gallery)?data.gallery:[]),...saved.map(file=>file.url)].slice(0,40);
+        else if(key==='gallery')data.gallery=[...(Array.isArray(data.gallery)?data.gallery:(Array.isArray(data.images)?data.images.map(item=>typeof item==='string'?item:item.url||item.image):[])),...saved.map(file=>file.url)].slice(0,40);
         else {data[key]=saved[0].url;data[key+'Image']=saved[0].url;}
       }
       for(const key of ['before','after','beforeImage','afterImage'])if(data[key])data[key]=safeUrl(data[key]);
-      if(Array.isArray(data.gallery))data.gallery=data.gallery.map(item=>typeof item==='string'?safeUrl(item):{image:safeUrl(item.image||item.url),alt:textValue(item.alt,300)}).filter(item=>typeof item==='string'?item:item.image);
+      if(Array.isArray(data.gallery))data.images=data.gallery.map(item=>typeof item==='string'?{url:safeUrl(item),alt:data.alt||title}:{url:safeUrl(item.url||item.image),alt:textValue(item.alt,300)}).filter(item=>item.url);
+      else if(Array.isArray(data.images))data.images=data.images.map(item=>typeof item==='string'?{url:safeUrl(item),alt:data.alt||title}:{url:safeUrl(item.url||item.image),alt:textValue(item.alt,300)}).filter(item=>item.url);
+      if(Array.isArray(data.images))data.gallery=data.images.map(item=>item.url);
+      if(data.before&&!data.beforeImage)data.beforeImage=data.before;
+      if(data.after&&!data.afterImage)data.afterImage=data.after;
       const record=db.save(req.params.key,{id:old?.id,title,slug,description:textValue(req.body.description,5000),image,enabled:checked(req.body.enabled),position:Math.min(100000,Math.max(0,Number(req.body.position)||0)),data});
       res.redirect(303,'/admin/'+req.params.key+'/'+record.id+'/edit?saved=1');
     } catch(error) {
