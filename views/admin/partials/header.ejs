@@ -1,0 +1,45 @@
+<%
+const pageName = typeof pageTitle !== 'undefined' ? pageTitle : 'لوحة الإدارة';
+const site = typeof settings !== 'undefined' && settings ? settings : {};
+const nav = typeof collections !== 'undefined' && Array.isArray(collections) ? collections : [];
+const selected = typeof active !== 'undefined' ? active : '';
+const user = typeof adminUser !== 'undefined' ? adminUser : null;
+const notice = typeof flash !== 'undefined' ? flash : null;
+const issues = typeof errors !== 'undefined' ? errors : [];
+%>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+  <title><%= pageName %> · <%= site.businessName || 'لمسة المستقبل' %></title>
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body class="<%= user ? 'admin-layout' : 'login-layout' %>">
+<% if (user) { %>
+<aside class="admin-sidebar" id="admin-sidebar" aria-label="القائمة الرئيسية">
+  <a class="admin-brand" href="/admin"><span class="brand-symbol" aria-hidden="true">لـ</span><span><strong><%= site.businessName || 'لمسة المستقبل' %></strong><small>مساحة إدارة الموقع</small></span></a>
+  <nav>
+    <a class="nav-item <%= selected === 'dashboard' ? 'is-active' : '' %>" href="/admin"><span aria-hidden="true">◈</span> نظرة عامة</a>
+    <p class="nav-caption">إدارة المحتوى</p>
+    <% nav.forEach(item => { %>
+    <a class="nav-item <%= selected === item.key ? 'is-active' : '' %>" href="/admin/<%= encodeURIComponent(item.key) %>"><span aria-hidden="true">◇</span> <%= item.label %></a>
+    <% }); %>
+    <p class="nav-caption">التواصل والإعدادات</p>
+    <a class="nav-item <%= selected === 'requests' ? 'is-active' : '' %>" href="/admin/requests?type=quotes"><span aria-hidden="true">▤</span> طلبات العملاء</a>
+    <a class="nav-item <%= selected === 'settings' ? 'is-active' : '' %>" href="/admin/settings"><span aria-hidden="true">⚙</span> الإعدادات العامة</a>
+  </nav>
+  <div class="sidebar-bottom"><a href="/" target="_blank" rel="noopener">معاينة الموقع <span aria-hidden="true">↗</span></a><form action="/admin/logout" method="post"><input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>"><button class="logout-button" type="submit">تسجيل الخروج</button></form></div>
+</aside>
+<div class="sidebar-backdrop" data-menu-close hidden></div>
+<div class="admin-main">
+<header class="admin-topbar"><div><button class="menu-toggle" type="button" aria-label="فتح القائمة" aria-expanded="false" aria-controls="admin-sidebar" data-menu-toggle>☰</button><span class="topbar-label">لوحة التحكم</span><span class="topbar-divider">/</span><strong><%= pageName %></strong></div><div class="admin-user"><span class="avatar" aria-hidden="true">م</span><span><%= user.email || 'مدير الموقع' %></span></div></header>
+<main class="admin-content" id="main-content">
+<% } else { %>
+<main class="login-main" id="main-content">
+<% } %>
+<% if (notice) { %><div class="notice notice-success" role="status"><%= typeof notice === 'string' ? notice : notice.message || 'تم حفظ التغييرات بنجاح.' %></div><% } %>
+<% if (issues && (Array.isArray(issues) ? issues.length : true)) { %><div class="notice notice-error" role="alert"><% (Array.isArray(issues) ? issues : [issues]).forEach(issue => { %><p><%= typeof issue === 'string' ? issue : issue.message || issue.msg || 'تحقق من البيانات المدخلة.' %></p><% }); %></div><% } %>
