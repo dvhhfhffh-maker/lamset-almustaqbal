@@ -14,7 +14,28 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page }) => {
-  expect(page.__runtimeErrors || [], 'Pages must not emit JavaScript or console errors').toEqual([]);
+  const errors = [...(page.__runtimeErrors || [])];
+  const records = page.__cleanupRecords || [];
+  if (records.length || page.__sliderOrder) {
+    const response = await page.context().request.get('/admin/projects/new');
+    expect(response.status()).toBe(200);
+    const html = await response.text();
+    const token = html.match(/name=["']_csrf["'][^>]*value=["']([^"']+)["']/)?.[1];
+    expect(token).toBeTruthy();
+    for (const { collection, id } of records.reverse()) {
+      const result = await page.context().request.post('/admin/' + collection + '/' + id + '/delete', {
+        form: { _csrf: token }, maxRedirects: 0,
+      });
+      expect([302, 303], 'Temporary browser content should be removed').toContain(result.status());
+    }
+    if (page.__sliderOrder) {
+      const result = await page.context().request.post('/admin/slider/reorder', {
+        data: { _csrf: token, ids: page.__sliderOrder },
+      });
+      expect(result.status()).toBe(200);
+    }
+  }
+  expect(errors, 'Pages must not emit JavaScript or console errors').toEqual([]);
 });
 
 async function noOverflow(page) {
@@ -44,6 +65,9 @@ async function saveFixture(page, collection, fields, uploads = {}) {
     maxRedirects: 0,
   });
   expect([302, 303], 'A fixture should use the authenticated save endpoint').toContain(response.status());
+  const id = response.headers().location?.match(/\/admin\/[^/]+\/([^/]+)\/edit/)?.[1];
+  expect(id).toBeTruthy();
+  (page.__cleanupRecords ||= []).push({ collection, id });
 }
 
 async function fillField(page, name, value) {
@@ -262,6 +286,8 @@ test('administrator can upload, create, edit and delete a project through the da
 test('slider image upload and duration can be managed from the admin form', async ({ page }, testInfo) => {
   const title = 'صورة واجهة اختبار ' + testInfo.project.name + '-' + Date.now();
   await login(page);
+  await page.goto('/admin/slider');
+  page.__sliderOrder = await page.locator('tbody[data-sortable] [data-record-row]').evaluateAll(elements => elements.map(element => element.dataset.recordId));
   await page.goto('/admin/slider/new');
   await page.locator('[name="title"]').fill(title);
   await page.locator('[name="slug"]').fill('hero-' + testInfo.project.name + '-' + Date.now());
@@ -270,6 +296,9 @@ test('slider image upload and duration can be managed from the admin form', asyn
   await page.locator('[name="duration"]').fill('4000');
   await page.locator('[name="enabled"]').check();
   await page.getByRole('button', { name: 'حفظ التغييرات', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/slider\/[^/]+\/edit/);
+  const newSlideId = new URL(page.url()).pathname.split('/')[3];
+  (page.__cleanupRecords ||= []).push({ collection: 'slider', id: newSlideId });
   await page.goto('/admin/slider');
   const row = page.locator('[data-record-row]').filter({ hasText: title });
   await expect(row).toBeVisible();
