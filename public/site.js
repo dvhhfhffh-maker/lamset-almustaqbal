@@ -84,6 +84,55 @@
     let hovered = false;
     let focused = element.contains(document.activeElement);
     let visible = true;
+    let requestedIndex = index;
+    let transitionId = 0;
+    let preloadToken = 0;
+    let idleHandle = null;
+    let idleIsNative = false;
+
+    const hydrateSlide = (slide) => {
+      selectAll('img[data-src]', slide).forEach((image) => {
+        if (image.dataset.srcset) {
+          image.srcset = image.dataset.srcset;
+          delete image.dataset.srcset;
+        }
+        image.src = image.dataset.src;
+        delete image.dataset.src;
+      });
+      return select('img', slide);
+    };
+    const cancelPreload = () => {
+      preloadToken += 1;
+      if (idleHandle !== null) {
+        if (idleIsNative) window.cancelIdleCallback(idleHandle);
+        else window.clearTimeout(idleHandle);
+        idleHandle = null;
+      }
+    };
+    const preloadNext = () => {
+      if (!options.lazyImages || slides.length < 2) return;
+      const token = preloadToken;
+      const nextIndex = (index + 1) % slides.length;
+      const loadNext = () => {
+        idleHandle = null;
+        if (token === preloadToken && !document.hidden) hydrateSlide(slides[nextIndex]);
+      };
+      const defer = () => {
+        if (token !== preloadToken || document.hidden) return;
+        if (typeof window.requestIdleCallback === 'function' && typeof window.cancelIdleCallback === 'function') {
+          idleIsNative = true;
+          idleHandle = window.requestIdleCallback(loadNext, { timeout: 2000 });
+        } else {
+          idleIsNative = false;
+          idleHandle = window.setTimeout(loadNext, 750);
+        }
+      };
+      const image = select('img', slides[index]);
+      if (image && !image.complete) {
+        image.addEventListener('load', defer, { once: true });
+        image.addEventListener('error', defer, { once: true });
+      } else defer();
+    };
 
     const stop = () => {
       if (timer !== null) window.clearTimeout(timer);
@@ -106,32 +155,53 @@
       if (pauseLabel) pauseLabel.textContent = userPaused ? 'تشغيل العرض' : 'إيقاف العرض';
     };
     const show = (requested, manual = true) => {
-      index = ((requested % slides.length) + slides.length) % slides.length;
-      slides.forEach((slide, position) => {
-        const active = position === index;
-        slide.classList.toggle('is-active', active);
-        slide.setAttribute('aria-hidden', String(!active));
-        slide.inert = !active;
-        if (options.useHidden) slide.hidden = !active;
-      });
-      dots.forEach((dot, position) => {
-        const dotIndex = Number(dot.dataset.index ?? position);
-        const active = dotIndex === index;
-        dot.classList.toggle('is-active', active);
-        dot.setAttribute('aria-pressed', String(active));
-        dot.setAttribute('aria-label', 'عرض الصورة ' + arabicNumber.format(dotIndex + 1));
-      });
-      if (current) current.textContent = String(index + 1).padStart(2, '0');
-      if (manual && status) status.textContent = 'الصورة ' + arabicNumber.format(index + 1) + ' من ' + arabicNumber.format(slides.length);
-      schedule();
+      const nextIndex = ((requested % slides.length) + slides.length) % slides.length;
+      requestedIndex = nextIndex;
+      const transition = ++transitionId;
+      cancelPreload();
+      stop();
+      const image = options.lazyImages ? hydrateSlide(slides[nextIndex]) : null;
+      const activate = () => {
+        if (transition !== transitionId) return;
+        index = nextIndex;
+        slides.forEach((slide, position) => {
+          const active = position === index;
+          slide.classList.toggle('is-active', active);
+          slide.setAttribute('aria-hidden', String(!active));
+          slide.inert = !active;
+          if (options.useHidden) slide.hidden = !active;
+        });
+        dots.forEach((dot, position) => {
+          const dotIndex = Number(dot.dataset.index ?? position);
+          const active = dotIndex === index;
+          dot.classList.toggle('is-active', active);
+          dot.setAttribute('aria-pressed', String(active));
+          dot.setAttribute('aria-current', String(active));
+          dot.setAttribute('aria-label', 'عرض الصورة ' + arabicNumber.format(dotIndex + 1));
+        });
+        if (current) current.textContent = String(index + 1).padStart(2, '0');
+        if (manual && status) status.textContent = 'الصورة ' + arabicNumber.format(index + 1) + ' من ' + arabicNumber.format(slides.length);
+        schedule();
+        preloadNext();
+      };
+      if (nextIndex !== index && image && !image.complete) {
+        const ready = () => {
+          image.removeEventListener('load', ready);
+          image.removeEventListener('error', ready);
+          if (typeof image.decode === 'function' && image.naturalWidth > 0) image.decode().then(activate, activate);
+          else activate();
+        };
+        image.addEventListener('load', ready, { once: true });
+        image.addEventListener('error', ready, { once: true });
+      } else activate();
     };
     if (previous) {
       previous.disabled = slides.length < 2;
-      previous.addEventListener('click', () => show(index - 1));
+      previous.addEventListener('click', () => show(requestedIndex - 1));
     }
     if (next) {
       next.disabled = slides.length < 2;
-      next.addEventListener('click', () => show(index + 1));
+      next.addEventListener('click', () => show(requestedIndex + 1));
     }
     dots.forEach((dot, position) => {
       dot.addEventListener('click', () => show(Number(dot.dataset.index ?? position)));
@@ -159,10 +229,10 @@
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
         const direction = (rtl && event.key === 'ArrowLeft') || (!rtl && event.key === 'ArrowRight') ? 1 : -1;
-        show(index + direction);
+        show(requestedIndex + direction);
       }
     });
-    swipe(element, () => show(index - 1), () => show(index + 1));
+    swipe(element, () => show(requestedIndex - 1), () => show(requestedIndex + 1));
     document.addEventListener('visibilitychange', schedule);
     listenMotion(() => { updatePause(); schedule(); });
     if ('IntersectionObserver' in window) {
@@ -172,7 +242,7 @@
       }, { threshold: 0.05 });
       observer.observe(element);
     }
-    window.addEventListener('pagehide', stop);
+    window.addEventListener('pagehide', () => { stop(); cancelPreload(); });
     window.addEventListener('pageshow', schedule);
     updatePause();
     show(index, false);
@@ -181,7 +251,7 @@
   selectAll('[data-carousel]').forEach((element) => setupCarousel(element, {
     slide: '[data-slide]', previous: '[data-carousel-prev]', next: '[data-carousel-next]',
     dot: '[data-carousel-dot]', pause: '[data-carousel-pause]', current: '[data-slide-current]',
-    status: '[data-carousel-status]', duration: 5000
+    status: '[data-carousel-status]', duration: 5000, lazyImages: true
   }));
   selectAll('[data-testimonials]').forEach((element) => setupCarousel(element, {
     slide: '[data-testimonial]', previous: '[data-testimonial-prev]', next: '[data-testimonial-next]',
