@@ -179,6 +179,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
   const reviewLimit=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false,
     handler:(req,res,next)=>next(new HttpError(429,'وصلت إلى الحد المسموح لمشاركة الآراء. حاول مرة أخرى لاحقًا.'))});
   app.post('/testimonials',reviewLimit,sessions.csrf,(req,res)=>{
+    req.body ??= {};
     const website=typeof req.body.website==='string'?req.body.website.trim():(req.body.website==null?'':'filled');
     if(website)return res.redirect(303,'/testimonials?review=sent#write-review');
     const rawName=req.body.name,rawComment=req.body.comment,rawDistrict=req.body.district??'',rawService=req.body.service??'';
