@@ -162,6 +162,10 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       if(title.length<2||!slug||!/^[-_a-zA-Z0-9\u0600-\u06ff]+$/.test(slug))throw new HttpError(422,'أدخل عنوانًا ورابطًا صالحًا دون مسافات.');
       const data={...old?.data,...objectJSON(req.body.dataJSON,'بيانات العنصر')};
       if(data.content!==undefined&&typeof data.content!=='string')throw new HttpError(422,'محتوى الصفحة يجب أن يكون نصًا.');
+      for(const key of ['features','highlights'])if(data[key]!==undefined&&(!Array.isArray(data[key])||data[key].some(value=>typeof value!=='string')))throw new HttpError(422,'نقاط المحتوى يجب أن تكون قائمة نصوص.');
+      if(data.steps!==undefined&&(!Array.isArray(data.steps)||data.steps.some(value=>typeof value!=='string'&&(!value||typeof value!=='object'||typeof value.title!=='string'||typeof value.text!=='string'))))throw new HttpError(422,'خطوات الخدمة يجب أن تكون قائمة صحيحة.');
+      if(data.faqs!==undefined&&(!Array.isArray(data.faqs)||data.faqs.some(value=>!value||typeof value!=='object'||typeof value.question!=='string'||typeof value.answer!=='string')))throw new HttpError(422,'الأسئلة يجب أن تتضمن سؤالًا وإجابة نصية.');
+      if(data.buttonUrl!==undefined)data.buttonUrl=safeLink(data.buttonUrl);
       for(const arrayKey of ['gallery','images'])if(data[arrayKey]!==undefined&&(!Array.isArray(data[arrayKey])||data[arrayKey].some(value=>typeof value!=='string'&&(!value||typeof value!=='object'||Array.isArray(value)))))throw new HttpError(422,'قائمة الصور غير صالحة.');
       const fields=['content','area','district','service','projectDate','buttonLabel','author','seoTitle','metaDescription','clientName','propertyType','alt','category','path','date'];
       for(const field of fields)if(typeof req.body[field]==='string')data[field]=textValue(req.body[field],field==='content'?100000:3000);

@@ -7,7 +7,7 @@
 يتطلب Node.js 24 أو أحدث.
 
 ```sh
-npm install
+npm ci
 cp .env.example .env
 npm start
 ```

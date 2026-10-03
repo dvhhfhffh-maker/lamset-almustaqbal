@@ -31,6 +31,10 @@
       document.documentElement.classList.toggle('menu-open', open);
     };
     setMenu(false);
+    const desktopMenu=window.matchMedia('(min-width: 961px)');
+    const closeDesktopMenu=()=>{if(desktopMenu.matches)setMenu(false);};
+    if(desktopMenu.addEventListener)desktopMenu.addEventListener('change',closeDesktopMenu);
+    else if(desktopMenu.addListener)desktopMenu.addListener(closeDesktopMenu);
     menuToggle.addEventListener('click', () => {
       setMenu(menuToggle.getAttribute('aria-expanded') !== 'true');
     });

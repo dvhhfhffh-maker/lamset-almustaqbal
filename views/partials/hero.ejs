@@ -1,7 +1,7 @@
 <section class="hero" data-carousel aria-label="صور الدهانات والديكور" aria-roledescription="عرض شرائح">
 <div class="hero-images">
 <% slides.forEach((slide,i)=> { %><div class="hero-slide <%= i===0?'is-active':'' %>" data-slide data-duration="<%= slide.data.duration || 5000 %>" aria-hidden="<%= i!==0 %>">
-<img <%- i===0?'src':'data-src' %>="<%= slide.image %>" alt="<%= slide.data.alt || slide.title %>" <% if(i===0) { %>srcset="<%= srcsetFor(slide.image) %>"<% } %> width="1920" height="1280" <%- i===0?'fetchpriority="high" loading="eager"':'loading="lazy"' %> decoding="async" sizes="100vw">
+<img <%- i===0?'src':'data-src' %>="<%= slide.image %>" alt="<%= slide.data.alt || slide.title %>" <%- i===0?'srcset':'data-srcset' %>="<%= srcsetFor(slide.image) %>" width="1920" height="1280" <%- i===0?'fetchpriority="high" loading="eager"':'loading="lazy"' %> decoding="async" sizes="100vw">
 <div class="hero-slide-caption"><span><%= slide.title %></span><% if(slide.data.buttonUrl) { %><a href="<%= slide.data.buttonUrl %>"><%= slide.data.buttonText || 'اكتشف المزيد' %></a><% } %></div>
 </div><% }) %>
 </div><div class="hero-shade"></div>

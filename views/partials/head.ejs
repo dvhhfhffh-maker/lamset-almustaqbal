@@ -9,6 +9,7 @@
 <meta property="og:site_name" content="<%= settings.siteName %>"><meta property="og:title" content="<%= title %>">
 <meta property="og:description" content="<%= description %>"><meta property="og:url" content="<%= canonical %>">
 <% if(pageImage || settings.ogImage) { %><meta property="og:image" content="<%= pageImage || settings.ogImage %>"><% } %>
+<% if(pageImage) { %><meta name="twitter:image" content="<%= pageImage %>"><% } %>
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="<%= title %>"><meta name="twitter:description" content="<%= description %>">
 <% if(keywords) { %><meta name="keywords" content="<%= Array.isArray(keywords)?keywords.join(', '):keywords %>"><% } %>
 <meta name="csrf-token" content="<%= csrfToken %>">
