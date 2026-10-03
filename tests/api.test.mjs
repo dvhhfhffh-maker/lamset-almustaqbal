@@ -90,10 +90,10 @@ function schemas(html) {
     });
 }
 
-beforeEach(async () => {
+beforeEach(async context => {
   workspace = await mkdtemp(join(tmpdir(), 'lamset-api-'));
   app = await createApp({ databasePath: join(workspace, 'site.db'), uploadsDir: join(workspace, 'uploads'), testing: true });
-  app.locals.db.createUser(account.email, await bcrypt.hash(account.password, 4));
+  if (!context.name.startsWith('first administrator')) app.locals.db.createUser(account.email, await bcrypt.hash(account.password, 4));
   server = await new Promise(resolve => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
   });
@@ -326,4 +326,79 @@ test('public form submissions are rate limited per client', async () => {
     assert.ok([302, 303].includes(response.status), 'Valid requests should be accepted before the limit');
   }
   assert.ok(limited, 'Contact endpoint must stop repeated submissions');
+});
+
+test('first administrator setup hashes the owner password, rotates the session and cannot be reused', async () => {
+  const client = new Client();
+  assert.equal(app.locals.db.countUsers(), 0);
+  const setupToken = app.locals.initialSetupToken;
+  assert.match(setupToken || '', /^[a-f0-9]{64}$/);
+  const path = '/admin/setup/' + setupToken;
+  const csrf = await client.token(path);
+  const fields = { email: account.email, password: account.password, passwordConfirm: account.password };
+  const oldSession = client.cookies.get('lm.sid');
+  const created = await client.post(path, fields, csrf);
+  assert.equal(created.status, 303);
+  assert.equal(created.headers.get('location'), '/admin');
+  assert.notEqual(client.cookies.get('lm.sid'), oldSession);
+  assert.equal(app.locals.db.countUsers(), 1);
+  const user = app.locals.db.getUserByEmail(account.email);
+  assert.notEqual(user.passwordHash, account.password);
+  assert.ok(await bcrypt.compare(account.password, user.passwordHash));
+  assert.equal((await client.request('/admin')).status, 200);
+  assert.equal((await new Client().request(path)).status, 404, 'A used setup token must never reopen the setup page');
+  const adminCsrf = await client.token('/admin/projects/new');
+  assert.equal((await client.post('/admin/logout', {}, adminCsrf)).status, 303);
+  assert.equal((await client.request('/admin')).status, 303);
+  const anonymousCsrf = await client.token('/admin/login');
+  assert.equal((await client.post(path, fields, anonymousCsrf)).status, 404);
+  assert.equal(app.locals.db.countUsers(), 1);
+});
+
+test('first administrator setup keeps its token private and rejects CSRF and invalid credentials', async () => {
+  const client = new Client();
+  const setupToken = app.locals.initialSetupToken;
+  assert.match(setupToken || '', /^[a-f0-9]{64}$/);
+  const loginPage = await (await client.request('/admin/login')).text();
+  assert.doesNotMatch(loginPage, new RegExp(setupToken), 'The private setup link must not be discoverable on the login screen');
+  assert.doesNotMatch(await (await client.request('/')).text(), new RegExp(setupToken));
+  const path = '/admin/setup/' + setupToken;
+  const csrf = await client.token(path);
+  const fields = { email: account.email, password: account.password, passwordConfirm: account.password };
+  const forged = await client.post(path, fields, 'forged-csrf');
+  assert.equal(forged.status, 403);
+  assert.equal((await client.post(path, { ...fields, password: 'short', passwordConfirm: 'short' }, csrf)).status, 422);
+  assert.equal((await client.post(path, { ...fields, passwordConfirm: 'different-confirmation' }, csrf)).status, 422);
+  assert.equal((await client.post(path, { ...fields, email: 'invalid-email' }, csrf)).status, 422);
+  assert.equal(app.locals.db.countUsers(), 0);
+  assert.equal((await client.request('/admin')).status, 303);
+});
+
+test('first administrator expired and invalid setup links cannot create an account', async () => {
+  const client = new Client();
+  const setupToken = app.locals.initialSetupToken;
+  assert.match(setupToken || '', /^[a-f0-9]{64}$/);
+  assert.equal((await client.request('/admin/setup/' + '0'.repeat(64))).status, 404);
+  app.locals.db.sqlite.prepare('UPDATE AdminSetupTokens SET expiresAt=?').run(Date.now() - 1);
+  const path = '/admin/setup/' + setupToken;
+  assert.equal((await client.request(path)).status, 404);
+  assert.equal((await client.post(path, {
+    email: account.email, password: account.password, passwordConfirm: account.password,
+  }, 'expired-token')).status, 404);
+  assert.equal(app.locals.db.countUsers(), 0);
+  assert.equal((await client.request('/admin')).status, 303);
+});
+
+test('first administrator setup becomes unavailable when any owner account already exists', async () => {
+  const client = new Client();
+  const setupToken = app.locals.initialSetupToken;
+  assert.match(setupToken || '', /^[a-f0-9]{64}$/);
+  app.locals.db.createUser(account.email, await bcrypt.hash(account.password, 4));
+  assert.equal((await client.request('/admin/setup/' + setupToken)).status, 404);
+  assert.equal((await client.post('/admin/setup/' + setupToken, {
+    email: 'other-owner@example.test', password: account.password, passwordConfirm: account.password,
+  }, 'no-csrf-needed-for-invalid-link')).status, 404);
+  assert.equal(app.locals.db.countUsers(), 1);
+  await client.login();
+  assert.equal((await client.request('/admin')).status, 200);
 });
