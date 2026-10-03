@@ -1,0 +1,3 @@
+<%- include('partials/header', { pageTitle: typeof title !== 'undefined' ? title : 'تعذّر إكمال الطلب' }) %>
+<section class="panel empty-state"><span class="empty-symbol" aria-hidden="true">◇</span><h1><%= typeof title !== 'undefined' ? title : 'تعذّر إكمال الطلب' %></h1><p>راجع البيانات أو عد إلى لوحة التحكم للمتابعة.</p><a class="button button-primary" href="/admin">العودة إلى لوحة التحكم ←</a></section>
+<%- include('partials/footer') %>
