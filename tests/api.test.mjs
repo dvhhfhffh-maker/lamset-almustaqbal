@@ -402,3 +402,86 @@ test('first administrator setup becomes unavailable when any owner account alrea
   await client.login();
   assert.equal((await client.request('/admin')).status, 200);
 });
+
+test('managed categories, project flags, customer names and offers appear on the public site', async () => {
+  const admin = new Client();
+  let token = await admin.login();
+  for (const [collection, values] of [
+    ['projects', { title: 'تاريخ غير صالح', slug: 'invalid-calendar-day', projectDate: '2026-02-31', enabled: '1' }],
+    ['slider', { title: 'شريحة دون صورة', enabled: '1' }],
+    ['beforeAfter', { title: 'مقارنة غير مكتملة', enabled: '1' }],
+  ]) {
+    const rejected = await admin.request('/admin/' + collection + '/save', { method: 'POST', body: multipart(values, token) });
+    assert.equal(rejected.status, 422, 'Invalid dates or missing required imagery must prevent publication');
+    assert.equal(app.locals.db.list(collection).some(item => item.title === values.title), false);
+  }
+  const categoryTitle = 'تفاصيل هادئة للاختبار';
+  const categoryResponse = await admin.request('/admin/categories/save', {
+    method: 'POST', body: multipart({
+      title: categoryTitle, slug: 'managed-category', description: 'تصنيف جديد لإدارة المعرض', enabled: '1',
+    }, token),
+  });
+  assert.equal(categoryResponse.status, 303);
+  const projectResponse = await admin.request('/admin/projects/save', {
+    method: 'POST', body: multipart({
+      title: 'مشروع مميز مُدار', slug: 'managed-featured-project', description: 'مشروع اختبار إعدادات النشر',
+      enabled: '1', manageFlags: '1', featured: '1', demo: '1', tags: '', projectDate: '2026-01-15',
+      imageUrl: '/favicon.svg', dataJSON: JSON.stringify({ category: categoryTitle, images: [{ url: '/favicon.svg', alt: 'وصف صورة محفوظ' }] }),
+    }, token),
+  });
+  assert.equal(projectResponse.status, 303);
+  const project = app.locals.db.get('projects', 'managed-featured-project');
+  assert.equal(project.data.featured, true);
+  assert.equal(project.data.demo, true);
+  assert.equal(project.data.date, '2026-01-15');
+  const gallery = await (await new Client().request('/projects')).text();
+  assert.ok(gallery.includes('data-filter="' + categoryTitle + '"'), 'Managed categories must be available as gallery filters');
+  assert.ok(gallery.includes('data-categories="' + categoryTitle + '"'), 'Empty tags must fall back to the selected category');
+  assert.match(await (await new Client().request('/')).text(), /مشروع مميز مُدار/);
+  token = await admin.token('/admin/projects/' + project.id + '/edit');
+  const unsetFlags = await admin.request('/admin/projects/save', {
+    method: 'POST', body: multipart({
+      id: project.id, title: project.title, slug: project.slug, description: project.description,
+      enabled: '1', manageFlags: '1', imageUrl: project.image, galleryUrls: '/favicon.svg', dataJSON: JSON.stringify(project.data),
+    }, token),
+  });
+  assert.equal(unsetFlags.status, 303);
+  const updated = app.locals.db.get('projects', project.id);
+  assert.equal(updated.data.featured, false);
+  assert.equal(updated.data.demo, false);
+  assert.equal(updated.data.images[0].alt, 'وصف صورة محفوظ', 'Editing gallery URLs must preserve existing alternative text');
+  const reviewResponse = await admin.request('/admin/testimonials/save', {
+    method: 'POST', body: multipart({
+      title: 'سجل تقييم اختبار', clientName: 'عميل إدارة التقييمات', description: 'تقييم اختبار لإثبات ظهور اسم العميل',
+      enabled: '1', rating: '4', area: 'النرجس', manageFlags: '1', demo: '1',
+    }, token),
+  });
+  assert.equal(reviewResponse.status, 303, 'Review forms should not require an invisible slug field');
+  const review = app.locals.db.list('testimonials').find(item => item.title === 'سجل تقييم اختبار');
+  assert.ok(review?.slug, 'A review must receive a stable generated identifier');
+  const reviewSlug = review.slug;
+  const editedReview = await admin.request('/admin/testimonials/save', {
+    method: 'POST', body: multipart({
+      id: review.id, title: review.title, clientName: 'عميل بعد التعديل', description: review.description,
+      enabled: '1', rating: '4', dataJSON: JSON.stringify(review.data),
+    }, token),
+  });
+  assert.equal(editedReview.status, 303);
+  assert.equal(app.locals.db.get('testimonials', review.id).slug, reviewSlug, 'Editing without a slug must preserve the existing identifier');
+  assert.match(await (await new Client().request('/testimonials')).text(), /عميل بعد التعديل/);
+  const offerResponse = await admin.request('/admin/offers/save', {
+    method: 'POST', body: multipart({
+      title: 'عرض معاينة اختبار', slug: 'managed-offer', description: 'عرض خاص يُدار من لوحة التحكم',
+      enabled: '1', dataJSON: JSON.stringify({ buttonText: 'اسأل عن العرض', buttonUrl: '/quote' }),
+    }, token),
+  });
+  assert.equal(offerResponse.status, 303);
+  assert.match(await (await new Client().request('/')).text(), /عرض معاينة اختبار/);
+  const unsafeLink = await admin.request('/admin/offers/save', {
+    method: 'POST', body: multipart({
+      title: 'اختبار رابط آمن', slug: 'managed-unsafe-link', dataJSON: JSON.stringify({ buttonUrl: 'javascript:alert(1)' }),
+    }, token),
+  });
+  assert.equal(unsafeLink.status, 303);
+  assert.equal(app.locals.db.get('offers', 'managed-unsafe-link', { all: true }).data.buttonUrl, '', 'Advanced JSON URLs must use the same safety checks as visible form fields');
+});

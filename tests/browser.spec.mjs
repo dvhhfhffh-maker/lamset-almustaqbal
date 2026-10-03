@@ -102,7 +102,7 @@ test('public pages, direct contacts and mobile navigation fit every device', asy
     }
   }
   await page.goto('/');
-  await page.screenshot({ path: testInfo.outputPath('home-' + testInfo.project.name + '.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('home-' + testInfo.project.name + '.png'), fullPage: true, scale: 'css' });
   const toggle = page.locator('[data-menu-toggle]');
   if (await toggle.isVisible()) {
     await toggle.click();
@@ -115,6 +115,12 @@ test('public pages, direct contacts and mobile navigation fit every device', asy
     await toggle.click();
     await page.keyboard.press('Escape');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const originalViewport = page.viewportSize();
+    await toggle.click();
+    await page.setViewportSize({ width: 1200, height: 850 });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeHidden();
+    await page.setViewportSize(originalViewport);
   } else {
     await page.locator('header').getByRole('link', { name: 'خدماتنا', exact: true }).click();
     await expect(page).toHaveURL(/\/services(?:\/)?$/);
@@ -259,6 +265,21 @@ test('administrator can upload, create, edit and delete a project through the da
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/admin\/login/);
   await login(page);
+  const menuToggle = page.locator('[data-menu-toggle]');
+  if (await menuToggle.isVisible()) {
+    await menuToggle.click();
+    const sidebar = page.locator('#admin-sidebar');
+    await expect(menuToggle).toHaveAttribute('aria-expanded', 'true');
+    const controls = sidebar.locator('a,button,input:not([type="hidden"]),select,textarea');
+    await controls.last().focus();
+    await page.keyboard.press('Tab');
+    await expect(controls.first()).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(controls.last()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(menuToggle).toBeFocused();
+  }
   await page.goto('/admin/projects/new');
   await page.locator('[name="title"]').fill(title);
   await page.locator('[name="slug"]').fill(slug);
@@ -293,7 +314,6 @@ test('slider image upload and duration can be managed from the admin form', asyn
   page.__sliderOrder = await page.locator('tbody[data-sortable] [data-record-row]').evaluateAll(elements => elements.map(element => element.dataset.recordId));
   await page.goto('/admin/slider/new');
   await page.locator('[name="title"]').fill(title);
-  await page.locator('[name="slug"]').fill('hero-' + testInfo.project.name + '-' + Date.now());
   await page.locator('[name="description"]').fill('تجربة رفع صورة الواجهة');
   await page.locator('[name="image"]').setInputFiles({ name: 'hero.png', mimeType: 'image/png', buffer: samplePhoto });
   await page.locator('[name="duration"]').fill('4000');
