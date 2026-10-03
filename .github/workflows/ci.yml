@@ -49,7 +49,7 @@ jobs:
           }
           function attribute(tag,name){return tag.match(new RegExp('\\b'+name+'=["\\x27]([^"\\x27]*)["\\x27]','i'))?.[1];}
           function canonical(html){const tag=[...html.matchAll(/<link\b[^>]*>/gi)].map(x=>x[0]).find(x=>attribute(x,'rel')==='canonical');return tag?attribute(tag,'href'):undefined;}
-          function schemas(html){return [...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].flatMap(x=>{const value=JSON.parse(x[1]);return value['@graph']||[value];});}
+          function schemas(html){return [...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].flatMap(x=>{const value=JSON.parse(x[1]);return value['@graph']||(Array.isArray(value)?value:[value]);});}
           const pages=['/','/services','/services/interior-painting-riyadh','/projects','/before-after','/about','/testimonials','/blog','/quote','/contact','/riyadh/al-narjis'];
           const assets=new Set();
           for(const path of pages){
