@@ -51,7 +51,7 @@ export function createSessionManager(db,{testing=false}={}) {
   function csrf(req,res,next) {
     const value=req.get('X-CSRF-Token')||req.body?._csrf;
     const expected=req.session?.csrfToken;
-    if(typeof value!=='string'||!/^[-a-f0-9]{64}$/.test(value)||typeof expected!=='string'||value.length!==expected.length||
+    if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value)||typeof expected!=='string'||value.length!==expected.length||
        !timingSafeEqual(Buffer.from(value),Buffer.from(expected))) return next(new HttpError(403,'انتهت صلاحية النموذج. حدّث الصفحة وحاول مرة أخرى.'));
     const origin=req.get('Origin');
     if(origin) {
