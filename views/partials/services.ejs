@@ -3,7 +3,7 @@
 <div class="services-grid">
 <% (view==='home'? services.slice(0,6):services).forEach((service,i)=>{ %>
 <article class="service-card" data-reveal>
-<a href="/services/<%= service.slug %>" class="service-image" tabindex="-1" aria-hidden="true"><img src="<%= service.image %>" alt="<%= service.data.alt || service.title %>" width="700" height="480" loading="lazy" decoding="async"><span class="service-number" dir="ltr"><%= String(i+1).padStart(2,'0') %></span></a>
+<a href="/services/<%= service.slug %>" class="service-image" tabindex="-1" aria-hidden="true"><img src="<%= service.image %>" srcset="<%= srcsetFor(service.image) %>" sizes="(max-width: 440px) calc(100vw - 32px), (max-width: 960px) 45vw, 30vw" alt="<%= service.data.alt || service.title %>" width="700" height="480" loading="lazy" decoding="async"><span class="service-number" dir="ltr"><%= String(i+1).padStart(2,'0') %></span></a>
 <div class="service-info"><span class="service-icon"><%- include('icon',{name:service.data.icon || 'paint'}) %></span><h3><a href="/services/<%= service.slug %>"><%= service.title %></a></h3><p><%= service.description %></p><a href="/services/<%= service.slug %>" class="card-link">عرض التفاصيل <span></span></a></div>
 </article><% }) %>
 </div></div></section>

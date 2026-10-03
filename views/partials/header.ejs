@@ -1,7 +1,7 @@
 <header class="site-header" data-header>
 <div class="header-inner container">
 <a href="/" class="brand" aria-label="<%= settings.siteName %> — الرئيسية">
-<% if(settings.logo) { %><img class="brand-image" src="<%= settings.logo %>" alt="<%= settings.siteName %>" width="180" height="54"><% } else { %>
+<% if(settings.logo) { %><img class="brand-image" src="<%= settings.logo %>" srcset="<%= srcsetFor(settings.logo) %>" sizes="(max-width: 700px) calc(100vw - 32px), 60vw" alt="<%= settings.siteName %>" width="180" height="54"><% } else { %>
 <span class="brand-mark"><span>لـ</span><i></i></span>
 <span class="brand-name"><strong><%= settings.siteName %></strong><small>للدهانات والديكور والتجديد</small></span><% } %>
 </a>

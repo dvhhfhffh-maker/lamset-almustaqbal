@@ -6,7 +6,7 @@
 <div class="gallery-grid">
 <% (view==='home'?projects.slice(0,6):projects).forEach((project,i)=>{ %><article class="project-card" data-gallery-item data-categories="<%= (project.data.tags || [project.data.category || 'ديكور']).join('|') %>" data-reveal>
 <a class="project-image" href="<%= project.image %>" data-lightbox data-title="<%= project.title %>" data-project-url="/projects/<%= project.slug %>">
-<img src="<%= project.image %>" alt="<%= project.data.alt || project.title %>" width="900" height="<%= i%3===1?1100:750 %>" loading="lazy" decoding="async">
+<img src="<%= project.image %>" srcset="<%= srcsetFor(project.image) %>" sizes="(max-width: 700px) 45vw, 30vw" alt="<%= project.data.alt || project.title %>" width="900" height="<%= i%3===1?1100:750 %>" loading="lazy" decoding="async">
 <span class="project-expand"><%- include('icon',{name:'search'}) %><span class="sr-only">تكبير الصورة</span></span>
 <% if(project.data.demo) { %><span class="image-label">صورة إلهامية</span><% } %></a>
 <div class="project-info"><div><p><%= project.data.category || project.data.service || 'ديكور داخلي' %><% if(project.data.district) { %> · <%= project.data.district %><% } %></p><h3><a href="/projects/<%= project.slug %>"><%= project.title %></a></h3></div><a class="project-details" href="/projects/<%= project.slug %>" aria-label="تفاصيل <%= project.title %>"><%- include('icon',{name:'eye'}) %></a></div>

@@ -20,6 +20,8 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Export resolved dependency manifest
+        run: node -e "console.log('LOCKFILE_JSON=' + JSON.stringify(require('node:fs').readFileSync('package-lock.json','utf8')))"
       - name: Check source and templates
         run: npm run check
       - name: Verify routes, persistence and security
