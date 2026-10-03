@@ -3,7 +3,7 @@
 const info = request.data || {};
 const requestFields = [['name','الاسم'],['phone','رقم الهاتف'],['whatsapp','رقم واتساب'],['email','البريد الإلكتروني'],['area','المنطقة'],['district','الحي'],['service','نوع الخدمة'],['propertyType','نوع العقار'],['budget','الميزانية التقريبية']];
 const images = Array.isArray(info.photos) ? info.photos : Array.isArray(info.images) ? info.images : [];
-const statusOptions = [['new','جديد'],['contacted','تم التواصل'],['in_progress','قيد المعالجة'],['completed','مكتمل'],['closed','مغلق']];
+const statusOptions = [['new','جديد'],['contacted','تم التواصل'],['quoted','تم إرسال العرض'],['completed','مكتمل'],['closed','مغلق']];
 const contactNumber = String(info.whatsapp || info.phone || '').replace(/[^0-9]/g,'');
 const whatsappNumber = contactNumber.startsWith('05') ? '966' + contactNumber.slice(1) : contactNumber;
 %>
