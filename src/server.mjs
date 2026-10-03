@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdir } from 'node:fs/promises';
@@ -36,14 +36,39 @@ function businessSchema(settings,base) {
   if(settings.logo)schema.logo=absolute(settings.logo,base);
   return schema;
 }
+export function srcsetFor(url) {
+  try {
+    const original=new URL(url);
+    if(original.protocol!=='https:'||original.hostname!=='images.unsplash.com')return '';
+    return [480,800,1200,1600,1920].map(width=>{
+      const variant=new URL(original);
+      variant.searchParams.set('w',String(width));
+      variant.searchParams.set('auto','format');
+      return variant.href+' '+width+'w';
+    }).join(', ');
+  } catch{return '';}
+}
 export async function createApp({databasePath=process.env.DATABASE_PATH||resolve(root,'data/site.sqlite'),uploadsDir=process.env.UPLOADS_DIR||resolve(root,'data/uploads'),testing=false}={}) {
   const app=express(),db=createDatabase(databasePath);
-  app.locals.db=db;app.locals.uploadsDir=resolve(uploadsDir);
+  app.locals.db=db;app.locals.uploadsDir=resolve(uploadsDir);app.locals.srcsetFor=srcsetFor;
   app.disable('x-powered-by');
   if(process.env.TRUST_PROXY==='1')app.set('trust proxy',1);
   app.set('view engine','ejs');app.set('views',resolve(root,'views'));
   await mkdir(resolve(uploadsDir,'media'),{recursive:true});
-  await bootstrapAdmin(db);
+  const envEmail=process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const envPassword=process.env.ADMIN_PASSWORD;
+  const validEnvAdmin=envEmail&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(envEmail)&&envPassword&&envPassword.length>=12&&Buffer.byteLength(envPassword,'utf8')<=72;
+  if(db.countUsers()>0||validEnvAdmin)await bootstrapAdmin(db);
+  else if(process.env.NODE_ENV==='production'||testing) {
+    const token=randomBytes(32).toString('hex');
+    db.issueAdminSetupToken(createHash('sha256').update(token).digest('hex'),Date.now()+60*60*1000);
+    if(testing)app.locals.initialSetupToken=token;
+    else {
+      const candidate=safeUrl(process.env.SITE_URL||db.getSettings().siteUrl);
+      const base=candidate&&!candidate.startsWith('/')?candidate.replace(/\/$/,''):'';
+      console.log('ADMIN_SETUP_URL='+base+'/admin/setup/'+token);
+    }
+  }
   app.use((req,res,next)=>{res.locals.cspNonce=randomBytes(18).toString('base64');next();});
   app.use(helmet({
     contentSecurityPolicy:{directives:{
@@ -68,7 +93,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
   const sessions=createSessionManager(db,{testing});
   app.use(sessions.middleware);
   app.use((req,res,next)=>{
-    Object.assign(res.locals,publicData(db));
+    Object.assign(res.locals,publicData(db),{srcsetFor});
     const settings=res.locals.settings;
     res.locals.waUrl='https://wa.me/'+String(settings.whatsapp||'966501308295').replace(/\D/g,'')+'?text='+encodeURIComponent(settings.whatsappMessage||whatsappMessage);
     res.locals.telUrl='tel:'+phoneValue(settings.phone||'+966501308295');
@@ -149,7 +174,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
   app.use((error,req,res,next)=>{
     if(res.headersSent)return next(error);
     if(!res.locals.settings) {
-      Object.assign(res.locals,publicData(db),{item:null,schema:[],canonical:'',description:'',pageImage:'',keywords:'',flash:'',errors:[],formValues:{},requestPath:req.path});
+      Object.assign(res.locals,publicData(db),{srcsetFor,item:null,schema:[],canonical:'',description:'',pageImage:'',keywords:'',flash:'',errors:[],formValues:{},requestPath:req.path});
       const settings=res.locals.settings;
       res.locals.waUrl='https://wa.me/'+String(settings.whatsapp||'966501308295').replace(/\D/g,'')+'?text='+encodeURIComponent(settings.whatsappMessage||whatsappMessage);
       res.locals.telUrl='tel:'+phoneValue(settings.phone||'+966501308295');
