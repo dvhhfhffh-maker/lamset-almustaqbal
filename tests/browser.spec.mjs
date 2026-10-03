@@ -38,7 +38,7 @@ async function saveFixture(page, collection, fields, uploads = {}) {
   const token = await formToken(page, '/admin/' + collection + '/new');
   const response = await page.context().request.post('/admin/' + collection + '/save', {
     multipart: {
-      _csrf: token, title: fields.title, enabled: '1', dataJSON: '{"isDemo":true}', ...fields,
+      _csrf: token, title: fields.title, enabled: '1', dataJSON: '{"demo":true}', ...fields,
       ...Object.fromEntries(Object.entries(uploads).map(([name, buffer]) => [name, { name: name + '.png', mimeType: 'image/png', buffer }])),
     },
     maxRedirects: 0,
@@ -104,8 +104,6 @@ test('hero supports timed transitions, pause, navigation and RTL swipe', async (
   const carousel = page.locator('[data-carousel]');
   const dots = carousel.locator('[data-carousel-dot]');
   expect(await dots.count()).toBeGreaterThan(1);
-  const currentIndex = () => dots.filter({ has: page.locator(':scope') });
-  void currentIndex;
   const index = () => carousel.locator('[data-carousel-dot].is-active').getAttribute('data-index');
   const initial = await index();
   await page.mouse.move(1, 1);
@@ -237,6 +235,7 @@ test('administrator can upload, create, edit and delete a project through the da
   await page.locator('[name="enabled"]').check();
   await page.getByRole('button', { name: 'حفظ التغييرات', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/projects/);
+  await page.goto('/admin/projects');
   const row = page.locator('[data-record-row]').filter({ hasText: title });
   await expect(row).toBeVisible();
   await row.getByRole('link', { name: 'تعديل', exact: true }).click();
@@ -249,7 +248,7 @@ test('administrator can upload, create, edit and delete a project through the da
   page.once('dialog', dialog => dialog.accept());
   await edited.getByRole('button', { name: 'حذف', exact: true }).click();
   await expect(page.locator('[data-record-row]').filter({ hasText: title })).toHaveCount(0);
-  expect((await page.goto('/projects/' + slug)).status()).toBe(404);
+  expect((await page.context().request.get('/projects/' + slug)).status()).toBe(404);
 });
 
 test('slider image upload and duration can be managed from the admin form', async ({ page }, testInfo) => {
@@ -257,24 +256,40 @@ test('slider image upload and duration can be managed from the admin form', asyn
   await login(page);
   await page.goto('/admin/slider/new');
   await page.locator('[name="title"]').fill(title);
+  await page.locator('[name="slug"]').fill('hero-' + testInfo.project.name + '-' + Date.now());
   await page.locator('[name="description"]').fill('تجربة رفع صورة الواجهة');
   await page.locator('[name="image"]').setInputFiles({ name: 'hero.png', mimeType: 'image/png', buffer: samplePhoto });
   await page.locator('[name="duration"]').fill('4000');
   await page.locator('[name="enabled"]').check();
   await page.getByRole('button', { name: 'حفظ التغييرات', exact: true }).click();
+  await page.goto('/admin/slider');
   const row = page.locator('[data-record-row]').filter({ hasText: title });
   await expect(row).toBeVisible();
   await row.getByRole('link', { name: 'تعديل', exact: true }).click();
   await expect(page.locator('[name="duration"]')).toHaveValue('4000');
   await expect(page.locator('[name="imageUrl"]')).toHaveValue(/^\/uploads\/media\/.+\.webp$/);
+  const uploadedURL = await page.locator('[name="imageUrl"]').inputValue();
   await noOverflow(page);
+  await page.goto('/admin/slider');
+  const rows = page.locator('tbody[data-sortable] [data-record-row]');
+  const oldOrder = await rows.evaluateAll(elements => elements.map(element => element.dataset.recordId));
+  expect(oldOrder.length).toBeGreaterThan(1);
+  if (!testInfo.project.use.hasTouch) {
+    await rows.last().dragTo(rows.first());
+  } else {
+    await rows.last().locator('[data-order="up"]').click();
+  }
+  const saveOrder = page.locator('[data-save-order]');
+  await expect(saveOrder).toBeEnabled();
+  const changedOrder = await rows.evaluateAll(elements => elements.map(element => element.dataset.recordId));
+  expect(changedOrder).not.toEqual(oldOrder);
+  const response = page.waitForResponse(result => result.url().endsWith('/admin/slider/reorder') && result.request().method() === 'POST');
+  await saveOrder.click();
+  expect((await response).status()).toBe(200);
+  await page.reload();
+  expect(await rows.evaluateAll(elements => elements.map(element => element.dataset.recordId))).toEqual(changedOrder);
   await page.goto('/');
-  const slide = page.locator('[data-slide]').filter({ hasText: title });
-  // Captions may be accessible image alternatives instead of visible text.
-  const matchingImage = page.locator('[data-slide] img').filter({ has: page.locator(':scope') });
-  void matchingImage;
-  expect(await page.locator('[data-slide]').count()).toBeGreaterThan(1);
-  void slide;
+  expect(await page.locator('[data-slide] img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toContain(uploadedURL);
 });
 
 test('reduced motion disables automatic carousel advancement', async ({ page }) => {
