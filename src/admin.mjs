@@ -20,6 +20,14 @@ function objectJSON(value,label) {
 const cleanSettings = object => Object.fromEntries(Object.entries(object).filter(([key])=>!key.startsWith('__')&&!['constructor','prototype'].includes(key)));
 const defaults={id:'',slug:'',title:'',description:'',image:'',enabled:true,position:0,data:{}};
 
+async function pruneMedia(db,uploadsDir,previous) {
+  const matches=[...JSON.stringify(previous||{}).matchAll(/\/uploads\/media\/([a-f0-9-]{36}\.webp)/g)];
+  if(!matches.length)return;
+  const used=JSON.stringify(db.getSettings())+Object.keys(collectionTables).map(key=>JSON.stringify(db.list(key,{all:true}))).join('');
+  const unused=[...new Set(matches.map(match=>match[1]))].filter(filename=>!used.includes('/uploads/media/'+filename)).map(filename=>({filename}));
+  await removeImages(unused,uploadsDir);
+}
+
 export async function createAdminRouter({db,sessions,uploadsDir}) {
   const router=express.Router();
   const dummyHash=await bcrypt.hash(randomBytes(24).toString('hex'),12);
@@ -53,7 +61,8 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
   router.post('/settings',upload.fields([{name:'logoUpload',maxCount:1},{name:'faviconUpload',maxCount:1},{name:'shareUpload',maxCount:1}]),sessions.csrf,async(req,res)=>{
     const uploaded=[];
     try {
-      const settings={...db.getSettings(),...cleanSettings(objectJSON(req.body.settingsJSON,'الإعدادات'))};
+      const oldSettings=db.getSettings();
+      const settings={...oldSettings,...cleanSettings(objectJSON(req.body.settingsJSON,'الإعدادات'))};
       const strings=['businessName','name','siteName','siteUrl','phone','whatsapp','email','description','heroTitle','heroSubtitle','heroDescription','logo','favicon','metaTitle','metaDescription','ogImage','accentColor','address','mapUrl','mapsUrl','officialStreetAddress'];
       for(const key of strings)if(typeof req.body[key]==='string')settings[key]=textValue(req.body[key],['description','metaDescription','heroDescription'].includes(key)?2500:1000);
       for(const key of ['logo','favicon','ogImage','mapsUrl','mapUrl'])settings[key]=safeUrl(settings[key]);
@@ -71,7 +80,7 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       for(const [field,key] of [['logoUpload','logo'],['faviconUpload','favicon'],['shareUpload','ogImage']])if(req.files?.[field]?.length) {
         const files=await processImages(req.files[field],uploadsDir);uploaded.push(...files);settings[key]=files[0].url;
       }
-      db.saveSettings(cleanSettings(settings));res.redirect(303,'/admin/settings?saved=1');
+      db.saveSettings(cleanSettings(settings));await pruneMedia(db,uploadsDir,oldSettings);res.redirect(303,'/admin/settings?saved=1');
     } catch(error) {
       await removeImages(uploaded,uploadsDir);
       if(error instanceof SyntaxError)throw new HttpError(422,'تحقق من صيغة JSON في الإعدادات.');
@@ -147,6 +156,7 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       if(data.before&&!data.beforeImage)data.beforeImage=data.before;
       if(data.after&&!data.afterImage)data.afterImage=data.after;
       const record=db.save(req.params.key,{id:old?.id,title,slug,description:textValue(req.body.description,5000),image,enabled:checked(req.body.enabled),position:Math.min(100000,Math.max(0,Number(req.body.position)||0)),data});
+      await pruneMedia(db,uploadsDir,old);
       res.redirect(303,'/admin/'+req.params.key+'/'+record.id+'/edit?saved=1');
     } catch(error) {
       await removeImages(uploaded,uploadsDir);
@@ -154,8 +164,10 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       throw error;
     }
   });
-  router.post('/:key/:id/delete',sessions.csrf,(req,res)=>{
+  router.post('/:key/:id/delete',sessions.csrf,async(req,res)=>{
+    const old=db.get(req.params.key,req.params.id,{all:true});
     if(!db.remove(req.params.key,req.params.id))throw new HttpError(404,'العنصر غير موجود.');
+    await pruneMedia(db,uploadsDir,old);
     res.redirect(303,'/admin/'+req.params.key+'?saved=1');
   });
   return router;
