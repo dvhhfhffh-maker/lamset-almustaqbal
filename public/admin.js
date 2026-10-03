@@ -32,7 +32,7 @@
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') setMenu(false);
     if (event.key === 'Tab' && menu?.classList.contains('is-open')) {
-      const controls = $('a,button,input:not([type=hidden]),select,textarea', menu).filter(item => !item.disabled);
+      const controls = $$('a,button,input:not([type=hidden]),select,textarea', menu).filter(item => !item.disabled);
       const first = controls[0];
       const last = controls[controls.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
