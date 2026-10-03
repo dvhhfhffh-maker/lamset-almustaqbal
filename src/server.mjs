@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import { rateLimit } from 'express-rate-limit';
 import { randomBytes, createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
@@ -80,6 +81,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     }},
     referrerPolicy:{policy:'strict-origin-when-cross-origin'}
   }));
+  app.use(compression({filter:(req,res)=>!req.path.startsWith('/admin')&&compression.filter(req,res)}));
   app.get('/healthz',(req,res)=>res.json({status:'ok'}));
   app.get('/theme.css',(req,res)=>{
     const color=db.getSettings().accentColor;
