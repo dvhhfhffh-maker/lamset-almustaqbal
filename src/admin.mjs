@@ -141,6 +141,13 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
     if(!Array.isArray(ids)||ids.length!==valid.size||new Set(ids).size!==ids.length||ids.some(id=>!valid.has(id)))throw new HttpError(422,'ترتيب الصور غير صالح.');
     db.reorder('slider',ids);res.json({success:true});
   });
+  router.post('/testimonials/:id/approve',sessions.csrf,(req,res)=>{
+    const record=db.get('testimonials',req.params.id,{all:true});
+    if(!record)throw new HttpError(404,'التقييم غير موجود.');
+    if(record.data.source==='customer'&&record.data.consent!==true)throw new HttpError(422,'لا يمكن نشر تقييم العميل دون موافقته على النشر.');
+    db.save('testimonials',{...record,enabled:true,data:{...record.data,moderationStatus:'published'}});
+    res.redirect(303,'/admin/testimonials?saved=1');
+  });
   router.param('key',(req,res,next,key)=>{
     if(!Object.hasOwn(collectionTables,key))return next(new HttpError(404,'القسم غير موجود.'));
     req.collection=adminCollections.find(item=>item.key===key);res.locals.active=key;next();
@@ -202,6 +209,10 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       if(data.before&&!data.beforeImage)data.beforeImage=data.before;
       if(data.after&&!data.afterImage)data.afterImage=data.after;
       const enabled=checked(req.body.enabled);
+      if(req.params.key==='testimonials'&&data.source==='customer') {
+        if(enabled&&data.consent!==true)throw new HttpError(422,'لا يمكن نشر تقييم العميل دون موافقته على النشر.');
+        data.moderationStatus=enabled?'published':'pending';
+      }
       if(enabled&&req.params.key==='slider'&&!image)throw new HttpError(422,'أضف صورة للشريحة قبل نشرها.');
       if(enabled&&req.params.key==='beforeAfter'&&(!data.beforeImage||!data.afterImage))throw new HttpError(422,'أضف صورتي قبل التنفيذ وبعده قبل النشر.');
       const record=db.save(req.params.key,{id:old?.id,title,slug,description:textValue(req.body.description,5000),image,enabled,position:Math.min(100000,Math.max(0,Number(req.body.position)||0)),data});

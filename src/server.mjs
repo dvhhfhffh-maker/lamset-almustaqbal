@@ -125,7 +125,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     if(view==='article')schema.push({'@context':'https://schema.org','@type':'Article',headline:item.title,description:pageDescription,image:absolute(item.image,base),
       datePublished:item.data?.date||item.createdAt,dateModified:item.updatedAt,author:{'@type':'Organization',name:item.data?.author||name},
       publisher:{'@id':base+'/#business'},mainEntityOfPage:canonical});
-    res.status(status).render('page',{view,item,title:pageTitle,description:pageDescription,canonical,schema,pageImage,keywords,errors,formValues,flash:flash??(req.query.sent==='1'?'تم حفظ طلبك بنجاح. سنتواصل معك لمناقشة التفاصيل.':'')});
+    res.status(status).render('page',{view,item,title:pageTitle,description:pageDescription,canonical,schema,pageImage,keywords,errors,formValues,flash:flash??(view==='testimonials'&&req.query.review==='sent'?'شكراً لمشاركة رأيك. سيظهر التقييم بعد مراجعته واعتماده.':req.query.sent==='1'?'تم حفظ طلبك بنجاح. سنتواصل معك لمناقشة التفاصيل.':'')});
   }
   app.get('/robots.txt',(req,res)=>{
     const base=baseURL(req,res.locals.settings);
@@ -140,7 +140,12 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
       urls.map(url=>'<url><loc>'+xml(base+(url.path==='/'?'':url.path))+'</loc>'+(url.date?'<lastmod>'+xml(url.date)+'</lastmod>':'')+'</url>').join('')+'</urlset>');
   });
   app.get('/',(req,res)=>renderPage(req,res,'home'));
-  for(const view of ['services','projects','before-after','about','testimonials','blog','quote','contact'])app.get('/'+view,(req,res)=>renderPage(req,res,view));
+  for(const view of ['services','projects','before-after','about','testimonials','blog','quote','contact'])app.get('/'+view,(req,res)=>{
+    const requestedService=view==='testimonials'&&typeof req.query.service==='string'?req.query.service:'';
+    const service=requestedService?db.get('services',requestedService):null;
+    const formValues=view==='testimonials'?{service:service?.slug===requestedService?requestedService:''}:{};
+    renderPage(req,res,view,{formValues});
+  });
   for(const [path,collection,view] of [['/services/:slug','services','service'],['/projects/:slug','projects','project'],['/blog/:slug','blog','article'],['/riyadh/:slug','areas','area']])
     app.get(path,(req,res)=>{const item=db.get(collection,req.params.slug);if(!item)return renderPage(req,res,'notfound',{status:404});renderPage(req,res,view,{item});});
   const formLimit=rateLimit({windowMs:60*60*1000,limit:10,standardHeaders:'draft-8',legacyHeaders:false,
@@ -171,6 +176,35 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     if(errors.length)return renderPage(req,res,'contact',{status:422,errors,formValues:data});
     db.createRequest('contacts',data);res.redirect(303,'/contact?sent=1');
   });
+  const reviewLimit=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-8',legacyHeaders:false,
+    handler:(req,res,next)=>next(new HttpError(429,'وصلت إلى الحد المسموح لمشاركة الآراء. حاول مرة أخرى لاحقًا.'))});
+  app.post('/testimonials',reviewLimit,sessions.csrf,(req,res)=>{
+    const website=typeof req.body.website==='string'?req.body.website.trim():(req.body.website==null?'':'filled');
+    if(website)return res.redirect(303,'/testimonials?review=sent#write-review');
+    const rawName=req.body.name,rawComment=req.body.comment,rawDistrict=req.body.district??'',rawService=req.body.service??'';
+    const name=typeof rawName==='string'?rawName.trim():'';
+    const comment=typeof rawComment==='string'?rawComment.trim():'';
+    const district=typeof rawDistrict==='string'?rawDistrict.trim():'';
+    const serviceSlug=typeof rawService==='string'?rawService.trim():'';
+    const rating=typeof req.body.rating==='number'?req.body.rating:(typeof req.body.rating==='string'&&req.body.rating.trim()?Number(req.body.rating):NaN);
+    const service=serviceSlug?db.get('services',serviceSlug):null;
+    const errors=[];
+    if(typeof rawName!=='string'||name.length<2||rawName.length>80)errors.push('اكتب اسمًا من حرفين إلى 80 حرفًا.');
+    if(typeof rawComment!=='string'||comment.length<3||rawComment.length>2000)errors.push('اكتب رأيًا من 3 إلى 2000 حرف.');
+    if(typeof rawDistrict!=='string'||rawDistrict.length>120)errors.push('اسم الحي يجب ألا يتجاوز 120 حرفًا.');
+    if(typeof rawService!=='string'||rawService.length>200||(serviceSlug&&service?.slug!==serviceSlug))errors.push('اختر خدمة متاحة من القائمة أو اتركها دون تحديد.');
+    if(!Number.isInteger(rating)||rating<1||rating>5)errors.push('اختر تقييمًا صحيحًا من نجمة إلى خمس نجوم.');
+    if(req.body.consent!=='on')errors.push('يلزم تأكيد موافقتك على نشر الاسم والرأي بعد المراجعة.');
+    const formValues={name:typeof rawName==='string'?rawName:'',comment:typeof rawComment==='string'?rawComment:'',
+      district:typeof rawDistrict==='string'?rawDistrict:'',service:typeof rawService==='string'?rawService:'',
+      rating:typeof req.body.rating==='string'||typeof req.body.rating==='number'?String(req.body.rating):'',
+      consent:req.body.consent==='on'?'on':''};
+    if(errors.length)return renderPage(req,res,'testimonials',{status:422,errors,formValues});
+    db.save('testimonials',{slug:'customer-review-'+randomBytes(12).toString('hex'),title:name,description:comment,image:'',enabled:false,position:0,
+      data:{source:'customer',clientName:name,rating,area:district,service:service?.title||'',serviceSlug,consent:true,
+        submittedAt:new Date().toISOString(),moderationStatus:'pending'}});
+    res.redirect(303,'/testimonials?review=sent#write-review');
+  });
   app.use('/admin',await createAdminRouter({db,sessions,uploadsDir}));
   app.use((req,res)=>renderPage(req,res,'notfound',{status:404}));
   app.use((error,req,res,next)=>{
@@ -191,7 +225,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
       if(!req.adminUser)return res.status(status).render('admin/login',{title:'دخول الإدارة',email:'',hasAdmin:db.countUsers()>0,errors:[message],collections:[],active:''});
       return res.status(status).render('admin/error',{title:'تعذر تنفيذ الطلب',errors:[message]});
     }
-    if(['/quote','/contact'].includes(req.path))return renderPage(req,res,req.path.slice(1),{status,errors:[message],formValues:req.body||{}});
+    if(['/quote','/contact','/testimonials'].includes(req.path))return renderPage(req,res,req.path.slice(1),{status,errors:[message],formValues:req.body||{}});
     renderPage(req,res,'notfound',{status,title:'تعذر عرض الصفحة',description:message,errors:[message]});
   });
   return app;
