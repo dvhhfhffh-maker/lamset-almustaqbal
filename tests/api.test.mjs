@@ -1,0 +1,309 @@
+import test, { beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import bcrypt from 'bcryptjs';
+import sharp from 'sharp';
+import { createApp } from '../src/server.mjs';
+
+const account = { email: 'api-test@example.test', password: 'Temporary-Test!Password-64859' };
+let app, server, origin, workspace;
+
+class Client {
+  cookies = new Map();
+
+  async request(path, options = {}) {
+    const headers = new Headers(options.headers);
+    if (this.cookies.size) headers.set('cookie', [...this.cookies].map(([key, value]) => key + '=' + value).join('; '));
+    const response = await fetch(origin + path, { ...options, headers, redirect: 'manual' });
+    for (const cookie of response.headers.getSetCookie()) {
+      const pair = cookie.split(';', 1)[0];
+      const boundary = pair.indexOf('=');
+      this.cookies.set(pair.slice(0, boundary), pair.slice(boundary + 1));
+    }
+    return response;
+  }
+
+  async token(path) {
+    const response = await this.request(path);
+    assert.equal(response.status, 200, 'CSRF form should be reachable at ' + path);
+    const html = await response.text();
+    for (const input of html.matchAll(/<input\b[^>]*>/gi)) {
+      if (/\bname=["']_csrf["']/.test(input[0])) {
+        const token = input[0].match(/\bvalue=["']([^"']+)["']/)?.[1];
+        if (token) return token;
+      }
+    }
+    const meta = [...html.matchAll(/<meta\b[^>]*>/gi)].find(match => /\bname=["']csrf-token["']/.test(match[0]));
+    const token = meta?.[0].match(/\bcontent=["']([^"']+)["']/)?.[1];
+    assert.ok(token, 'CSRF token must be rendered in the form');
+    return token;
+  }
+
+  post(path, values, token) {
+    return this.request(path, { method: 'POST', body: new URLSearchParams({ ...values, _csrf: token }) });
+  }
+
+  async login() {
+    const token = await this.token('/admin/login');
+    const response = await this.post('/admin/login', account, token);
+    assert.ok([302, 303].includes(response.status), 'Valid credentials should start a session');
+    assert.match(response.headers.get('location') || '', /^\/admin/);
+    return this.token('/admin/projects/new');
+  }
+}
+
+async function image() {
+  return sharp({ create: { width: 32, height: 24, channels: 3, background: '#b6a285' } }).png().toBuffer();
+}
+
+function multipart(fields, token) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.set(key, String(value));
+  form.set('_csrf', token);
+  return form;
+}
+
+function oneH1(html, route) {
+  assert.equal((html.match(/<h1(?:\s|>)/gi) || []).length, 1, 'Exactly one H1 is required at ' + route);
+  assert.match(html, /<html\b[^>]*\blang=["']ar["']/i);
+  assert.match(html, /<html\b[^>]*\bdir=["']rtl["']/i);
+  assert.match(html, /<title>[^<]+<\/title>/i);
+  assert.ok([...html.matchAll(/<meta\b[^>]*>/gi)].some(match => /\bname=["']description["']/.test(match[0]) && /\bcontent=["'][^"']{20,}/.test(match[0])));
+  const canonical = [...html.matchAll(/<link\b[^>]*>/gi)].find(match => /\brel=["']canonical["']/.test(match[0]));
+  assert.ok(canonical, 'Canonical URL is required at ' + route);
+  const href = canonical[0].match(/\bhref=["']([^"']+)["']/)?.[1];
+  assert.ok(href && /^https?:\/\//.test(href), 'Canonical URL must be absolute');
+}
+
+function schemas(html) {
+  return [...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+    .flatMap(match => {
+      const value = JSON.parse(match[1]);
+      return value['@graph'] || (Array.isArray(value) ? value : [value]);
+    });
+}
+
+beforeEach(async () => {
+  workspace = await mkdtemp(join(tmpdir(), 'lamset-api-'));
+  app = await createApp({ databasePath: join(workspace, 'site.db'), uploadsDir: join(workspace, 'uploads'), testing: true });
+  app.locals.db.createUser(account.email, await bcrypt.hash(account.password, 4));
+  server = await new Promise(resolve => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+  });
+  origin = 'http://127.0.0.1:' + server.address().port;
+});
+
+afterEach(async () => {
+  if (server) {
+    server.closeIdleConnections?.();
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+  app?.locals.db.close();
+  if (workspace) await rm(workspace, { recursive: true, force: true });
+});
+
+test('Arabic public routes and all service detail pages expose accessible SEO content', async () => {
+  const client = new Client();
+  const routes = ['/', '/services', '/projects', '/before-after', '/about', '/testimonials', '/blog', '/quote', '/contact'];
+  const services = app.locals.db.list('services').filter(service => service.enabled);
+  assert.equal(services.length, 14, 'The complete service catalogue should be available');
+  routes.push(...services.map(service => '/services/' + service.slug));
+  for (const area of app.locals.db.list('areas').filter(record => record.enabled)) routes.push('/riyadh/' + area.slug);
+  for (const article of app.locals.db.list('blog').filter(record => record.enabled)) routes.push('/blog/' + article.slug);
+  for (const project of app.locals.db.list('projects').filter(record => record.enabled)) routes.push('/projects/' + project.slug);
+  for (const route of routes) {
+    const response = await client.request(route);
+    assert.equal(response.status, 200, route);
+    const html = await response.text();
+    oneH1(html, route);
+    assert.match(html, /href=["']tel:\+966501308295["']/);
+    assert.match(html, /https:\/\/wa\.me\/966501308295\?text=/);
+    schemas(html);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.ok(response.headers.get('content-security-policy')?.includes('script-src'));
+  }
+  const home = await (await client.request('/')).text();
+  assert.ok(schemas(home).some(item => item['@type'] === 'LocalBusiness'));
+  assert.equal(app.locals.db.getSettings().statsEnabled, false, 'Unverified business statistics must stay hidden by default');
+  const detail = await (await client.request('/services/interior-painting-riyadh')).text();
+  assert.ok(schemas(detail).some(item => item['@type'] === 'Service'));
+  assert.ok(schemas(detail).some(item => item['@type'] === 'BreadcrumbList'));
+});
+
+test('health, sitemap, robots and unknown URLs return the intended status', async () => {
+  const client = new Client();
+  assert.equal((await client.request('/healthz')).status, 200);
+  const sitemap = await client.request('/sitemap.xml');
+  assert.equal(sitemap.status, 200);
+  const xml = await sitemap.text();
+  assert.match(xml, /<urlset\b/);
+  assert.match(xml, /\/services\/interior-painting-riyadh/);
+  assert.doesNotMatch(xml, /<loc>[^<]*\/admin/);
+  const robots = await client.request('/robots.txt');
+  assert.equal(robots.status, 200);
+  assert.match(await robots.text(), /Disallow:\s*\/admin/i);
+  for (const path of ['/missing-page', '/services/not-a-service', '/projects/not-a-project', '/blog/not-a-post']) {
+    const response = await client.request(path);
+    assert.equal(response.status, 404, path);
+    assert.match(await response.text(), /العودة للرئيسية/);
+  }
+});
+
+test('admin authentication protects reads and writes; wrong passwords do not start a session', async () => {
+  const client = new Client();
+  const anonymous = await client.request('/admin');
+  assert.ok([302, 303].includes(anonymous.status));
+  assert.match(anonymous.headers.get('location'), /^\/admin\/login/);
+  const token = await client.token('/admin/login');
+  const wrong = await client.post('/admin/login', { email: account.email, password: 'incorrect-password' }, token);
+  assert.equal(wrong.status, 401);
+  assert.ok([302, 303].includes((await client.request('/admin/projects')).status));
+  const validToken = await client.login();
+  const dashboard = await client.request('/admin');
+  assert.equal(dashboard.status, 200);
+  const protectedWrite = await client.request('/admin/projects/save', {
+    method: 'POST', body: multipart({ title: 'فحص حماية', enabled: '1' }, 'invalid-csrf'),
+  });
+  assert.equal(protectedWrite.status, 403);
+  const cookies = dashboard.headers.getSetCookie().join('; ');
+  // The login response and subsequent requests retain a server session; the browser suite also checks logout.
+  assert.ok(client.cookies.has('lm.sid'), 'Authentication must use a server session cookie');
+  assert.ok(validToken.length >= 16);
+  assert.equal(app.locals.db.list('projects').some(project => project.title === 'فحص حماية'), false);
+  void cookies;
+});
+
+test('CSRF and validation reject forged contact and quote requests before persistence', async () => {
+  const client = new Client();
+  const contactToken = await client.token('/contact');
+  const forged = await client.post('/contact', { name: 'عميل', phone: '0501308295', message: 'استفسار عن دهانات الرياض' }, 'forged-token');
+  assert.equal(forged.status, 403);
+  const missing = await client.request('/quote', { method: 'POST', body: new URLSearchParams({ name: 'عميل' }) });
+  assert.equal(missing.status, 403);
+  const invalid = await client.post('/contact', { name: '', phone: 'not-a-phone', message: '' }, contactToken);
+  assert.equal(invalid.status, 422);
+  assert.equal(app.locals.db.listRequests('contacts').length, 0);
+  assert.equal(app.locals.db.listRequests('quotes').length, 0);
+});
+
+test('contact requests persist safely and HTML is escaped when read by an administrator', async () => {
+  const client = new Client();
+  const token = await client.token('/contact');
+  const message = 'أرغب في معاينة المنزل <script>alert("xss")</script>';
+  const response = await client.post('/contact', { name: 'اختبار العميل', phone: '+966501308295', message }, token);
+  assert.ok([302, 303].includes(response.status));
+  assert.match(response.headers.get('location'), /sent=1/);
+  const requests = app.locals.db.listRequests('contacts');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].data.name, 'اختبار العميل');
+  const admin = new Client();
+  await admin.login();
+  const inbox = await admin.request('/admin/requests?type=contacts');
+  assert.equal(inbox.status, 200);
+  const html = await inbox.text();
+  assert.doesNotMatch(html, /<script>alert\("xss"\)<\/script>/);
+});
+
+test('quote requests store all submitted details and validated photos are private', async () => {
+  const client = new Client();
+  const token = await client.token('/quote');
+  const fields = {
+    name: 'عميل عرض السعر', phone: '0501308295', whatsapp: '+966501308295',
+    area: 'الرياض', district: 'النرجس', service: 'دهانات داخلية', propertyType: 'فيلا',
+    description: 'دهان صالة ومجلس مع معالجة تشققات الجدران', budget: '10000',
+  };
+  const form = multipart(fields, token);
+  form.append('photos', new Blob([await image()], { type: 'image/png' }), 'room.png');
+  const response = await client.request('/quote', { method: 'POST', body: form });
+  assert.ok([302, 303].includes(response.status));
+  assert.match(response.headers.get('location'), /sent=1/);
+  const requests = app.locals.db.listRequests('quotes');
+  assert.equal(requests.length, 1);
+  for (const key of ['name', 'district', 'propertyType', 'description']) assert.equal(requests[0].data[key], fields[key]);
+  const privatePaths = JSON.stringify(requests[0].data).match(/\/admin\/request-photos\/[^"\s]+\.webp/g) || [];
+  assert.equal(privatePaths.length, 1, 'Customer photos should have a protected URL');
+  const anonymousPhoto = await client.request(privatePaths[0]);
+  assert.notEqual(anonymousPhoto.status, 200);
+  const admin = new Client();
+  await admin.login();
+  const photo = await admin.request(privatePaths[0]);
+  assert.equal(photo.status, 200);
+  assert.match(photo.headers.get('content-type'), /image\/webp/);
+});
+
+test('upload validation rejects MIME spoofing and SVG content without saving a request', async () => {
+  const client = new Client();
+  const token = await client.token('/quote');
+  const values = {
+    name: 'عميل', phone: '0501308295', whatsapp: '', area: 'الرياض', district: 'الملقا',
+    service: 'دهانات داخلية', propertyType: 'شقة', description: 'دهانات الغرف',
+  };
+  for (const [content, type, name] of [
+    ['not actually a png', 'image/png', 'fake.png'],
+    ['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', 'image/svg+xml', 'unsafe.svg'],
+  ]) {
+    const form = multipart(values, token);
+    form.append('photos', new Blob([content], { type }), name);
+    assert.equal((await client.request('/quote', { method: 'POST', body: form })).status, 422);
+  }
+  assert.equal(app.locals.db.listRequests('quotes').length, 0);
+});
+
+test('authenticated project create, upload, edit and delete are reflected on public pages', async () => {
+  const admin = new Client();
+  let token = await admin.login();
+  const form = multipart({
+    title: 'مشروع اختبار مستقل', slug: 'integration-project', description: 'تجديد غرفة واختبار معرض الصور',
+    enabled: '1', area: 'الرياض', district: 'الياسمين', tags: 'دهانات,شقق', service: 'دهانات داخلية',
+    projectDate: '2026-01-15', dataJSON: JSON.stringify({ isDemo: true }),
+  }, token);
+  form.append('image', new Blob([await image()], { type: 'image/png' }), 'cover.png');
+  form.append('images', new Blob([await image()], { type: 'image/png' }), 'gallery.png');
+  const created = await admin.request('/admin/projects/save', { method: 'POST', body: form });
+  assert.ok([302, 303].includes(created.status), 'Project should save');
+  let project = app.locals.db.list('projects').find(record => record.slug === 'integration-project');
+  assert.ok(project);
+  assert.match(project.imageUrl, /^\/uploads\/media\/[^/]+\.webp$/);
+  const publicImage = await new Client().request(project.imageUrl);
+  assert.equal(publicImage.status, 200);
+  assert.match(publicImage.headers.get('content-type'), /image\/webp/);
+  assert.match(publicImage.headers.get('cache-control') || '', /max-age=/);
+  assert.match(await (await new Client().request('/projects/integration-project')).text(), /مشروع اختبار مستقل/);
+  token = await admin.token('/admin/projects/' + project.id + '/edit');
+  const changed = await admin.request('/admin/projects/save', {
+    method: 'POST',
+    body: multipart({
+      id: project.id, title: 'مشروع بعد التعديل', slug: project.slug, description: project.description,
+      imageUrl: project.imageUrl, enabled: '1', dataJSON: JSON.stringify(project.data || {}),
+    }, token),
+  });
+  assert.ok([302, 303].includes(changed.status));
+  assert.match(await (await new Client().request('/projects/integration-project')).text(), /مشروع بعد التعديل/);
+  token = await admin.token('/admin/projects/' + project.id + '/edit');
+  const deleted = await admin.post('/admin/projects/' + project.id + '/delete', {}, token);
+  assert.ok([302, 303].includes(deleted.status));
+  assert.equal(app.locals.db.list('projects').some(record => record.id === project.id), false);
+  assert.equal((await new Client().request('/projects/integration-project')).status, 404);
+  const mediaFiles = await readdir(join(workspace, 'uploads', 'media'));
+  assert.ok(Array.isArray(mediaFiles));
+});
+
+test('public form submissions are rate limited per client', async () => {
+  const client = new Client();
+  const token = await client.token('/contact');
+  let limited = false;
+  for (let index = 0; index < 30; index += 1) {
+    const response = await client.post('/contact', {
+      name: 'اختبار الحد', phone: '0501308295', message: 'رسالة اختبار رقم ' + index,
+    }, token);
+    if (response.status === 429) {
+      limited = true;
+      assert.ok(response.headers.get('retry-after'), 'Rate limit should explain when to retry');
+      break;
+    }
+    assert.ok([302, 303].includes(response.status), 'Valid requests should be accepted before the limit');
+  }
+  assert.ok(limited, 'Contact endpoint must stop repeated submissions');
+});
