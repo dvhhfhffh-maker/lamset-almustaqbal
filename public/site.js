@@ -489,7 +489,7 @@
   });
 
   const submittedForms = new WeakSet();
-  const publicForms = selectAll('[data-quote-form], [data-contact-form]');
+  const publicForms = selectAll('[data-quote-form], [data-contact-form], [data-review-form]');
   publicForms.forEach((form) => {
     form.addEventListener('submit', (event) => {
       if (submittedForms.has(form)) { event.preventDefault(); return; }
@@ -499,7 +499,7 @@
       selectAll('[data-submit]', form).forEach((button) => {
         button.disabled = true;
         button.dataset.originalText = button.textContent;
-        button.textContent = 'جارٍ إرسال الطلب…';
+        button.textContent = button.dataset.pendingLabel || 'جارٍ إرسال الطلب…';
       });
     });
 

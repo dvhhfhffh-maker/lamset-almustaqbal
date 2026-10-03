@@ -1,3 +1,71 @@
-<% if(testimonials.length) { %><section class="section testimonials-section"><div class="container"><div class="section-heading"><div><p class="eyebrow">آراء العملاء</p><h2>ثقة تُبنى، وتجربة تُروى</h2></div></div><div class="testimonials-slider" data-testimonials aria-roledescription="عرض تقييمات"><div class="testimonials-track">
-<% testimonials.forEach((review,i)=> { %><article class="testimonial <%= i===0?'is-active':'' %>" data-testimonial <%- i?'hidden':'' %>><span class="quote-mark"><%- include('icon',{name:'quote'}) %></span><div class="review-stars" aria-label="التقييم <%= review.data.rating || 5 %> من 5"><% for(let j=0;j<Number(review.data.rating || 5);j++) { %><%- include('icon',{name:'star'}) %><% } %></div><blockquote><%= review.description %></blockquote><div class="review-person"><span class="avatar"><%= (review.data.clientName || review.title).slice(0,1) %></span><div><h3><%= review.data.clientName || review.title %></h3><p><%= review.data.area || review.data.district || '' %></p></div></div></article><% }) %>
-</div><div class="testimonial-controls"><button class="icon-button" data-testimonial-prev aria-label="التقييم السابق"><%- include('icon',{name:'next'}) %></button><% testimonials.forEach((_,i)=> { %><button class="testimonial-dot <%= i===0?'is-active':'' %>" data-testimonial-dot data-index="<%= i %>" aria-label="التقييم <%= i+1 %>"></button><% }) %><button class="icon-button" data-testimonial-next aria-label="التقييم التالي"><%- include('icon',{name:'chevron'}) %></button><button class="icon-button" data-testimonial-pause aria-label="إيقاف عرض التقييمات تلقائيًا"><%- include('icon',{name:'pause'}) %></button><span class="sr-only" data-testimonial-current aria-live="polite">1</span></div></div></div></section><% } else if(view==='testimonials') { %><section class="section"><div class="container empty-state"><span class="empty-icon"><%- include('icon',{name:'quote'}) %></span><h2>كل تجربة تستحق أن تُسمع</h2><p>ننشر آراء العملاء بعد موافقتهم والتحقق منها. إذا استفدت من خدماتنا، يسعدنا سماع تجربتك.</p><a class="button button-dark" href="<%= waUrl %>" target="_blank" rel="noopener noreferrer">شاركنا تجربتك عبر واتساب</a></div></section><% } %>
+<section class="section testimonials-section" aria-labelledby="reviews-heading">
+  <div class="container">
+    <div class="section-heading review-section-heading">
+      <div><p class="eyebrow">آراء العملاء</p><h2 id="reviews-heading"><%= testimonials.length ? 'تجربة تُروى، وثقة تنمو' : 'كل تجربة تستحق أن تُسمع' %></h2></div>
+      <a class="button button-outline-dark review-write-link" href="/testimonials#write-review"><%- include('icon',{name:'quote'}) %> اكتب رأيك عن الخدمة</a>
+    </div>
+    <% if(testimonials.length) { %>
+      <div class="testimonials-slider" data-testimonials aria-roledescription="عرض تقييمات">
+        <div class="testimonials-track">
+          <% testimonials.forEach((review,i)=> { const publishedRating=Number(review.data.rating); %>
+            <article class="testimonial <%= i===0?'is-active':'' %>" data-testimonial <%- i?'hidden':'' %>>
+              <span class="quote-mark"><%- include('icon',{name:'quote'}) %></span>
+              <% if(Number.isInteger(publishedRating) && publishedRating>=1 && publishedRating<=5) { %>
+                <div class="review-stars" aria-label="التقييم <%= publishedRating %> من 5"><% for(let j=0;j<publishedRating;j++) { %><%- include('icon',{name:'star'}) %><% } %></div>
+              <% } %>
+              <blockquote><%= review.description %></blockquote>
+              <div class="review-person"><span class="avatar"><%= (review.data.clientName || review.title).slice(0,1) %></span><div><h3><%= review.data.clientName || review.title %></h3><p><%= [review.data.service, review.data.area || review.data.district].filter(Boolean).join(' · ') %></p></div></div>
+            </article>
+          <% }) %>
+        </div>
+        <div class="testimonial-controls">
+          <button class="icon-button" data-testimonial-prev aria-label="التقييم السابق"><%- include('icon',{name:'next'}) %></button>
+          <% testimonials.forEach((_,i)=> { %><button class="testimonial-dot <%= i===0?'is-active':'' %>" data-testimonial-dot data-index="<%= i %>" aria-label="التقييم <%= i+1 %>"></button><% }) %>
+          <button class="icon-button" data-testimonial-next aria-label="التقييم التالي"><%- include('icon',{name:'chevron'}) %></button>
+          <button class="icon-button" data-testimonial-pause aria-label="إيقاف عرض التقييمات تلقائيًا"><%- include('icon',{name:'pause'}) %><span class="sr-only" data-testimonial-pause-label>إيقاف العرض التلقائي</span></button>
+          <span class="sr-only" data-testimonial-current aria-live="polite">1</span>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="reviews-empty">
+        <span class="reviews-empty-icon" aria-hidden="true"><%- include('icon',{name:'quote'}) %></span>
+        <div><p>هل استفدت من خدمات لمسة المستقبل؟ شاركنا رأيك عن التنفيذ والتواصل وتفاصيل تجربتك.</p><p class="reviews-empty-note">يظهر تعليقك بعد مراجعته.</p></div>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<% if(view==='testimonials') { const reviewValues=typeof formValues!=='undefined' && formValues ? formValues : {}; %>
+<section class="section review-form-section" id="write-review" aria-labelledby="write-review-heading">
+  <div class="container review-form-layout">
+    <div class="review-form-intro" data-reveal>
+      <p class="eyebrow">صوتك يهمّنا</p>
+      <h2 id="write-review-heading">كيف كانت<br>تجربتك معنا؟</h2>
+      <p>التفاصيل الصغيرة تصنع فرقًا. أخبرنا بما أعجبك، وما يمكننا تحسينه في الخدمة.</p>
+      <div class="review-publishing-note"><%- include('icon',{name:'shield'}) %><p>يظهر تعليقك بعد مراجعته.<br><span>ننشر الاسم والتعليق بموافقتك.</span></p></div>
+    </div>
+    <div class="form-card review-form-card" data-reveal>
+      <% if(typeof flash!=='undefined' && flash) { %>
+        <div class="form-success" role="status"><%- include('icon',{name:'check'}) %><div><strong>شكرًا لمشاركتك</strong><p><%= flash %></p></div></div>
+      <% } %>
+      <% if(typeof errors!=='undefined' && errors && errors.length) { %>
+        <div class="form-errors" role="alert"><strong>يرجى مراجعة البيانات التالية:</strong><ul><% errors.forEach(error=>{ %><li><%= typeof error==='string'?error:error.message %></li><% }) %></ul></div>
+      <% } %>
+      <form id="customer-review-form" action="/testimonials" method="post" data-review-form>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="form-grid">
+          <div class="field"><label for="review-name">الاسم <span aria-hidden="true">*</span></label><input id="review-name" name="name" autocomplete="name" required minlength="2" maxlength="80" placeholder="الاسم الذي سيظهر مع تعليقك" value="<%= reviewValues.name || '' %>"></div>
+          <div class="field"><label for="review-rating">تقييم الخدمة <span aria-hidden="true">*</span></label><select id="review-rating" name="rating" required><option value="">اختر تقييمك</option><% [[5,'ممتاز'],[4,'جيد جدًا'],[3,'جيد'],[2,'مقبول'],[1,'يحتاج إلى تحسين']].forEach(([rating,label])=>{ %><option value="<%= rating %>" <%= String(reviewValues.rating || '')===String(rating)?'selected':'' %>><%= rating %> — <%= label %></option><% }) %></select></div>
+          <div class="field"><label for="review-service">الخدمة (اختياري)</label><select id="review-service" name="service"><option value="">اختر الخدمة إن رغبت</option><% services.forEach(service=>{ %><option value="<%= service.slug %>" <%= reviewValues.service===service.slug?'selected':'' %>><%= service.title %></option><% }) %></select></div>
+          <div class="field"><label for="review-district">الحي (اختياري)</label><input id="review-district" name="district" maxlength="120" placeholder="مثال: النرجس" value="<%= reviewValues.district || '' %>"></div>
+          <div class="field field-full"><label for="review-comment">رأيك عن الخدمة <span aria-hidden="true">*</span></label><textarea id="review-comment" name="comment" rows="5" required minlength="3" maxlength="2000" placeholder="شاركنا رأيك بكلماتك…" aria-describedby="review-comment-note"><%= reviewValues.comment || '' %></textarea><p class="field-help" id="review-comment-note">من 3 إلى 2000 حرف. شاركنا التفاصيل التي لفتت انتباهك.</p></div>
+          <div class="field-full review-consent"><label for="review-consent"><input id="review-consent" type="checkbox" name="consent" value="on" required <%= reviewValues.consent==='on' || reviewValues.consent===true?'checked':'' %>><span>أوافق على نشر اسمي وتعليقي في الموقع بعد مراجعته.</span></label></div>
+        </div>
+        <div class="review-honeypot" hidden aria-hidden="true"><label for="review-website">الموقع الإلكتروني</label><input id="review-website" type="text" name="website" autocomplete="off" tabindex="-1" value="<%= reviewValues.website || '' %>"></div>
+        <button class="button button-dark form-submit" type="submit" data-submit data-pending-label="جارٍ إرسال التعليق…">إرسال التعليق <%- include('icon',{name:'quote'}) %></button>
+        <p class="form-note">يظهر تعليقك بعد مراجعته.</p>
+      </form>
+    </div>
+  </div>
+</section>
+<% } %>
