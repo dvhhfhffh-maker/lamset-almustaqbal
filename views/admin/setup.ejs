@@ -1,0 +1,16 @@
+<%- include('partials/header', { pageTitle: 'تهيئة حساب الإدارة' }) %>
+<div class="login-card">
+  <a class="login-brand" href="/"><span class="brand-symbol" aria-hidden="true">لـ</span><strong><%= settings.businessName || settings.siteName || 'لمسة المستقبل' %></strong></a>
+  <div class="login-rule"></div>
+  <p class="eyebrow">الخطوة الأولى</p><h1>حسابك، بين يديك</h1>
+  <p class="muted">اختر بريدك وكلمة مرورك لإدارة الموقع. يُستخدم رابط التهيئة مرة واحدة ويُغلق بعد إنشاء الحساب.</p>
+  <form action="/admin/setup/<%= setupToken %>" method="post">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label class="field"><span>البريد الإلكتروني</span><input name="email" type="email" dir="ltr" required autocomplete="username" maxlength="254" value="<%= email || '' %>" placeholder="you@example.com"></label>
+    <label class="field"><span>كلمة المرور</span><span class="password-wrap"><input name="password" id="setup-password" type="password" required autocomplete="new-password" minlength="12" maxlength="72"><button type="button" class="password-toggle" data-password-toggle aria-controls="setup-password" aria-label="إظهار كلمة المرور">إظهار</button></span><small>12 حرفًا على الأقل. احفظها في مكان آمن.</small></label>
+    <label class="field"><span>تأكيد كلمة المرور</span><input name="passwordConfirm" type="password" required autocomplete="new-password" minlength="12" maxlength="72"></label>
+    <button class="button button-primary full-width" type="submit" data-submit-label="جارٍ إنشاء الحساب…">إنشاء حساب الإدارة <span aria-hidden="true">←</span></button>
+  </form>
+  <a class="login-back" href="/">العودة إلى الموقع <span aria-hidden="true">↗</span></a>
+</div>
+<%- include('partials/footer') %>
