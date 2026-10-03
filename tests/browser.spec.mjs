@@ -219,13 +219,14 @@ test('before and after comparison handles pointer and keyboard changes accessibl
   await expect(range).toHaveAttribute('aria-valuetext', /0|٠/);
   await page.keyboard.press('End');
   await expect.poll(() => comparison.evaluate(element => element.style.getPropertyValue('--compare'))).toBe('100%');
-  const rect = await range.boundingBox();
-  await page.mouse.click(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5);
+  const size = await range.boundingBox();
+  await range.click({ position: { x: size.width * 0.5, y: size.height * 0.5 } });
   const previous = Number(await range.inputValue());
   expect(previous).toBeGreaterThan(10);
   expect(previous).toBeLessThan(90);
   await page.keyboard.press('ArrowRight');
   expect(Number(await range.inputValue())).not.toBe(previous);
+  const rect = await range.boundingBox();
   await page.mouse.move(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5);
   await page.mouse.down();
   await page.mouse.move(rect.x + rect.width * 0.75, rect.y + rect.height * 0.5, { steps: 5 });
