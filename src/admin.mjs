@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { rateLimit } from 'express-rate-limit';
 import { collectionTables } from './db.mjs';
@@ -156,7 +156,9 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
     const old=req.body.id?db.get(req.params.key,req.body.id,{all:true}):null;
     if(req.body.id&&!old)throw new HttpError(404,'العنصر غير موجود.');
     try {
-      const title=textValue(req.body.title,200),slug=textValue(req.body.slug,180);
+      const title=textValue(req.body.title,200);
+      let slug=textValue(req.body.slug,180)||old?.slug;
+      if(!slug){const friendly=title.normalize('NFKC').replace(/[^a-zA-Z0-9\u0600-\u06ff]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150);slug=(friendly||req.params.key)+'-'+randomUUID().slice(0,8);}
       if(title.length<2||!slug||!/^[-_a-zA-Z0-9\u0600-\u06ff]+$/.test(slug))throw new HttpError(422,'أدخل عنوانًا ورابطًا صالحًا دون مسافات.');
       const data={...old?.data,...objectJSON(req.body.dataJSON,'بيانات العنصر')};
       if(data.content!==undefined&&typeof data.content!=='string')throw new HttpError(422,'محتوى الصفحة يجب أن يكون نصًا.');
@@ -173,6 +175,14 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       let image=safeUrl(req.body.imageUrl??req.body.image??old?.image);
       if(req.body.projectDate!==undefined)data.date=data.projectDate;
       if(req.body.buttonLabel!==undefined)data.buttonText=data.buttonLabel;
+      if(data.date!==undefined&&data.date!==null&&data.date!=='') {
+        const value=data.date;
+        const validPattern=typeof value==='string'&&/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value);
+        const datePart=validPattern?value.slice(0,10):'';
+        const timestamp=validPattern?Date.parse(value):NaN;
+        const calendarDay=validPattern?Date.parse(datePart+'T00:00:00.000Z'):NaN;
+        if(!Number.isFinite(timestamp)||!Number.isFinite(calendarDay)||new Date(calendarDay).toISOString().slice(0,10)!==datePart)throw new HttpError(422,'أدخل تاريخًا صالحًا بصيغة السنة-الشهر-اليوم.');
+      }
       for(const flag of ['featured','demo'])if(req.body.manageFlags==='1'||req.body[flag]!==undefined)data[flag]=checked(req.body[flag]);
       for(const [field,key] of [['image','image'],['beforeImage','before'],['afterImage','after'],['images','gallery']])if(req.files?.[field]?.length) {
         const saved=await processImages(req.files[field],uploadsDir);uploaded.push(...saved);
@@ -181,12 +191,16 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
         else {data[key]=saved[0].url;data[key+'Image']=saved[0].url;}
       }
       for(const key of ['before','after','beforeImage','afterImage'])if(data[key])data[key]=safeUrl(data[key]);
-      if(Array.isArray(data.gallery))data.images=data.gallery.map(item=>typeof item==='string'?{url:safeUrl(item),alt:data.alt||title}:{url:safeUrl(item.url||item.image),alt:textValue(item.alt,300)}).filter(item=>item.url);
+      const imageAlts=new Map((Array.isArray(data.images)?data.images:[]).filter(item=>item&&typeof item==='object').map(item=>[safeUrl(item.url||item.image),textValue(item.alt,300)]));
+      if(Array.isArray(data.gallery))data.images=data.gallery.map(item=>typeof item==='string'?{url:safeUrl(item),alt:imageAlts.get(safeUrl(item))||data.alt||title}:{url:safeUrl(item.url||item.image),alt:textValue(item.alt,300)}).filter(item=>item.url);
       else if(Array.isArray(data.images))data.images=data.images.map(item=>typeof item==='string'?{url:safeUrl(item),alt:data.alt||title}:{url:safeUrl(item.url||item.image),alt:textValue(item.alt,300)}).filter(item=>item.url);
       if(Array.isArray(data.images))data.gallery=data.images.map(item=>item.url);
       if(data.before&&!data.beforeImage)data.beforeImage=data.before;
       if(data.after&&!data.afterImage)data.afterImage=data.after;
-      const record=db.save(req.params.key,{id:old?.id,title,slug,description:textValue(req.body.description,5000),image,enabled:checked(req.body.enabled),position:Math.min(100000,Math.max(0,Number(req.body.position)||0)),data});
+      const enabled=checked(req.body.enabled);
+      if(enabled&&req.params.key==='slider'&&!image)throw new HttpError(422,'أضف صورة للشريحة قبل نشرها.');
+      if(enabled&&req.params.key==='beforeAfter'&&(!data.beforeImage||!data.afterImage))throw new HttpError(422,'أضف صورتي قبل التنفيذ وبعده قبل النشر.');
+      const record=db.save(req.params.key,{id:old?.id,title,slug,description:textValue(req.body.description,5000),image,enabled,position:Math.min(100000,Math.max(0,Number(req.body.position)||0)),data});
       await pruneMedia(db,uploadsDir,old);
       res.redirect(303,'/admin/'+req.params.key+'/'+record.id+'/edit?saved=1');
     } catch(error) {

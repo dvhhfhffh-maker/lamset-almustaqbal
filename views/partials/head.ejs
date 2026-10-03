@@ -12,7 +12,7 @@
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="<%= title %>"><meta name="twitter:description" content="<%= description %>">
 <% if(keywords) { %><meta name="keywords" content="<%= Array.isArray(keywords)?keywords.join(', '):keywords %>"><% } %>
 <meta name="csrf-token" content="<%= csrfToken %>">
-<link rel="icon" href="<%= settings.favicon || '/favicon.svg' %>" type="<%= (settings.favicon || '').endsWith('.svg') || !settings.favicon ? 'image/svg+xml' : 'image/webp' %>">
+<link rel="icon" href="<%= settings.favicon || '/favicon.svg' %>">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css"><link rel="stylesheet" href="/theme.css">

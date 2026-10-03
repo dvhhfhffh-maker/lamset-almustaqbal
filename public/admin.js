@@ -78,9 +78,9 @@
         toast('يمكن رفع 12 صورة كحد أقصى في المرة الواحدة.', true);
         return;
       }
-      if (files.some(file => file.size > 8 * 1024 * 1024)) {
+      if (files.some(file => file.size > 5 * 1024 * 1024)) {
         input.value = '';
-        toast('الحد الأقصى لكل صورة هو 8 ميجابايت.', true);
+        toast('الحد الأقصى لكل صورة هو 5 ميجابايت.', true);
         return;
       }
       if (input.multiple) {

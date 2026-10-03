@@ -25,7 +25,7 @@ const absolute=(url,base)=>url?.startsWith('/')?base+url:url;
 function publicData(db) {
   return {settings:db.getSettings(),services:db.list('services'),projects:db.list('projects'),
     comparisons:db.list('beforeAfter'),testimonials:db.list('testimonials'),
-    posts:db.list('blog'),areas:db.list('areas'),slides:db.list('slider'),offers:db.list('offers')};
+    posts:db.list('blog'),areas:db.list('areas'),categories:db.list('categories'),slides:db.list('slider'),offers:db.list('offers')};
 }
 function businessSchema(settings,base) {
   const name=settings.businessName||settings.siteName||settings.name||'لمسة المستقبل';
@@ -75,7 +75,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     contentSecurityPolicy:{directives:{
       defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>"'nonce-"+res.locals.cspNonce+"'"],
       styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],
-      fontSrc:["'self'",'https://fonts.gstatic.com','data:'],imgSrc:["'self'",'https:','data:'],
+      fontSrc:["'self'",'https://fonts.gstatic.com','data:'],imgSrc:["'self'",'https:','data:','blob:'],
       connectSrc:["'self'"],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],
       frameSrc:["'self'",'https://www.google.com'],upgradeInsecureRequests:process.env.NODE_ENV==='production'?[]:null
     }},

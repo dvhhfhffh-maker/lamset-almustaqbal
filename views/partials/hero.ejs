@@ -15,13 +15,13 @@
 </div>
 <div class="container hero-bottom">
 <a href="#services" class="hero-scroll">اكتشف لمسة المستقبل <span class="scroll-line"></span></a>
-<div class="hero-controls">
+<% if(slides.length>1) { %><div class="hero-controls">
 <div class="hero-dots" aria-label="اختر صورة"><% slides.forEach((slide,i)=> { %><button data-carousel-dot data-index="<%= i %>" class="<%= i===0?'is-active':'' %>" aria-label="عرض الصورة <%= i+1 %>" aria-current="<%= i===0?'true':'false' %>"></button><% }) %></div>
 <span class="slide-count" dir="ltr"><b data-slide-current>01</b><i>/</i><%= String(slides.length).padStart(2,'0') %></span>
 <button class="icon-button hero-control" data-carousel-prev aria-label="الصورة السابقة"><%- include('icon',{name:'next'}) %></button>
 <button class="icon-button hero-control" data-carousel-next aria-label="الصورة التالية"><%- include('icon',{name:'chevron'}) %></button>
 <button class="icon-button hero-control pause-control" data-carousel-pause aria-label="إيقاف العرض التلقائي"><%- include('icon',{name:'pause'}) %><span class="sr-only" data-carousel-pause-label>إيقاف العرض التلقائي</span></button>
-</div></div>
+</div><% } %></div>
 <p class="sr-only" data-carousel-status aria-live="polite"></p>
 </section>
 <section class="signature-strip"><div class="container signature-inner">

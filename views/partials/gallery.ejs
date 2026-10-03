@@ -1,15 +1,16 @@
+<% const galleryProjects=view==='home'?projects.filter(project=>project.data.featured!==false).slice(0,6):projects; const galleryFilters=['الكل',...new Set(categories.map(category=>category.title).filter(title=>title&&title!=='الكل'))]; %>
 <section id="featured" class="section gallery-section"><div class="container">
 <div class="section-heading" data-reveal><div><p class="eyebrow"><%= view==='home'?'مختارات بصرية':'معرض الأعمال' %></p><h2><%= settings.projectsHeading || 'مساحات تُلهمك' %></h2></div><% if(view==='home') { %><a class="text-link" href="/projects">استكشف المعرض <span class="small-rule"></span></a><% } %></div>
-<% if(projects.some(p=>p.data.demo)) { %><p class="gallery-note"><%- include('icon',{name:'image'}) %> الصور الإلهامية المعلّمة أدناه لا تمثل أعمالًا منفذة للشركة. نستبدلها بصور مشاريعنا الموثقة فور إضافتها.</p><% } %>
+<% if(galleryProjects.some(p=>p.data.demo)) { %><p class="gallery-note"><%- include('icon',{name:'image'}) %> <%= settings.portfolioNote || 'الصور الإلهامية المعلّمة أدناه لا تمثل أعمالًا منفذة للشركة. نستبدلها بصور مشاريعنا الموثقة فور إضافتها.' %></p><% } %>
 <div data-gallery>
-<div class="gallery-filters" aria-label="تصفية الأعمال"><% ['الكل','دهانات','جبس','ديكور','ترميم','قبل وبعد','فلل','شقق','مجالس','أسقف'].forEach((filter,i)=>{ %><button type="button" class="filter-button <%= i===0?'is-active':'' %>" data-filter="<%= filter %>" aria-pressed="<%= i===0?'true':'false' %>"><%= filter %></button><% }) %></div>
+<div class="gallery-filters" aria-label="تصفية الأعمال"><% galleryFilters.forEach((filter,i)=>{ %><button type="button" class="filter-button <%= i===0?'is-active':'' %>" data-filter="<%= filter %>" aria-pressed="<%= i===0?'true':'false' %>"><%= filter %></button><% }) %></div>
 <div class="gallery-grid">
-<% (view==='home'?projects.slice(0,6):projects).forEach((project,i)=>{ %><article class="project-card" data-gallery-item data-categories="<%= (project.data.tags || [project.data.category || 'ديكور']).join('|') %>" data-reveal>
+<% galleryProjects.forEach((project,i)=>{ %><article class="project-card" data-gallery-item data-categories="<%= Array.from(new Set([project.data.category || 'ديكور', ...(Array.isArray(project.data.tags)?project.data.tags:[])])).join('|') %>" data-reveal>
 <a class="project-image" href="<%= project.image %>" data-lightbox data-title="<%= project.title %>" data-project-url="/projects/<%= project.slug %>">
 <img src="<%= project.image %>" srcset="<%= srcsetFor(project.image) %>" sizes="(max-width: 700px) 45vw, 30vw" alt="<%= project.data.alt || project.title %>" width="900" height="<%= i%3===1?1100:750 %>" loading="lazy" decoding="async">
 <span class="project-expand"><%- include('icon',{name:'search'}) %><span class="sr-only">تكبير الصورة</span></span>
 <% if(project.data.demo) { %><span class="image-label">صورة إلهامية</span><% } %></a>
 <div class="project-info"><div><p><%= project.data.category || project.data.service || 'ديكور داخلي' %><% if(project.data.district) { %> · <%= project.data.district %><% } %></p><h3><a href="/projects/<%= project.slug %>"><%= project.title %></a></h3></div><a class="project-details" href="/projects/<%= project.slug %>" aria-label="تفاصيل <%= project.title %>"><%- include('icon',{name:'eye'}) %></a></div>
 </article><% }) %>
-</div><p class="gallery-count" data-gallery-count aria-live="polite"><%= (view==='home'?projects.slice(0,6):projects).length %> مساحة في المعرض</p>
+</div><p class="gallery-count" data-gallery-count aria-live="polite"><%= galleryProjects.length %> مساحة في المعرض</p>
 </div></div></section>
