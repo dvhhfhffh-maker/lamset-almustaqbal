@@ -102,7 +102,7 @@
       pause.setAttribute('aria-pressed', String(userPaused));
       pause.title = label;
       pause.disabled = slides.length < 2 || motion.matches;
-      const pauseLabel = select('[data-carousel-pause-label]', pause);
+      const pauseLabel = select('[data-carousel-pause-label], [data-testimonial-pause-label]', pause);
       if (pauseLabel) pauseLabel.textContent = userPaused ? 'تشغيل العرض' : 'إيقاف العرض';
     };
     const show = (requested, manual = true) => {
@@ -185,7 +185,7 @@
   }));
   selectAll('[data-testimonials]').forEach((element) => setupCarousel(element, {
     slide: '[data-testimonial]', previous: '[data-testimonial-prev]', next: '[data-testimonial-next]',
-    dot: '[data-testimonial-dot]', current: '[data-testimonial-current]', duration: 6000, useHidden: true
+    dot: '[data-testimonial-dot]', pause: '[data-testimonial-pause]', current: '[data-testimonial-current]', duration: 6000, useHidden: true
   }));
 
   /* Gallery filtering is independent from image navigation. */
