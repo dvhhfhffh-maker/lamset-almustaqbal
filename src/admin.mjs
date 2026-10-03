@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { rateLimit } from 'express-rate-limit';
 import { collectionTables } from './db.mjs';
@@ -37,6 +37,30 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
     res.locals.collections=adminCollections;res.locals.active='';
     res.locals.flash=req.query.saved?'تم حفظ التغييرات بنجاح.':'';
     res.locals.errors=[];next();
+  });
+  const setupLimit=rateLimit({windowMs:60*60*1000,limit:12,standardHeaders:'draft-8',legacyHeaders:false,message:'محاولات تهيئة الإدارة كثيرة. حاول لاحقًا.'});
+  function validateSetup(req,res,next) {
+    if(!/^[a-f0-9]{64}$/.test(req.params.token||''))return next(new HttpError(404,'رابط التهيئة غير موجود أو انتهت صلاحيته.'));
+    const tokenHash=createHash('sha256').update(req.params.token).digest('hex');
+    if(!db.getAdminSetupToken(tokenHash))return next(new HttpError(404,'رابط التهيئة غير موجود أو انتهت صلاحيته.'));
+    req.setupTokenHash=tokenHash;next();
+  }
+  router.get('/setup/:token',setupLimit,validateSetup,(req,res)=>res.render('admin/setup',{title:'تهيئة حساب الإدارة',email:'',setupToken:req.params.token}));
+  router.post('/setup/:token',setupLimit,validateSetup,sessions.csrf,async(req,res)=>{
+    const email=textValue(req.body.email,254).toLowerCase();
+    const password=typeof req.body.password==='string'?req.body.password:'';
+    const confirm=typeof req.body.passwordConfirm==='string'?req.body.passwordConfirm:'';
+    const errors=[];
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))errors.push('أدخل بريدًا إلكترونيًا صالحًا.');
+    if(password.length<12)errors.push('اختر كلمة مرور لا تقل عن 12 حرفًا.');
+    if(Buffer.byteLength(password,'utf8')>72)errors.push('كلمة المرور طويلة جدًا. استخدم كلمة أقصر.');
+    if(password!==confirm)errors.push('تأكيد كلمة المرور لا يطابق كلمة المرور.');
+    if(errors.length)return res.status(422).render('admin/setup',{title:'تهيئة حساب الإدارة',email,setupToken:req.params.token,errors});
+    const passwordHash=await bcrypt.hash(password,12);
+    const user=db.consumeAdminSetupToken(req.setupTokenHash,email,passwordHash);
+    if(!user)throw new HttpError(404,'رابط التهيئة غير موجود أو انتهت صلاحيته.');
+    sessions.issue(req,res,user.id);
+    res.redirect(303,'/admin');
   });
   router.get('/login',(req,res)=>{
     if(req.adminUser)return res.redirect('/admin');
