@@ -286,7 +286,7 @@ test('authenticated project create, upload, edit and delete are reflected on pub
   let project = app.locals.db.list('projects').find(record => record.slug === 'integration-project');
   assert.ok(project);
   assert.match(project.image, /^\/uploads\/media\/[^/]+\.webp$/);
-  const publicImage = await new Client().request(project.imageUrl);
+  const publicImage = await new Client().request(project.image);
   assert.equal(publicImage.status, 200);
   assert.match(publicImage.headers.get('content-type'), /image\/webp/);
   assert.match(publicImage.headers.get('cache-control') || '', /max-age=/);
