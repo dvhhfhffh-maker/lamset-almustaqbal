@@ -1,0 +1,14 @@
+<%- include('partials/header', { pageTitle: 'تسجيل الدخول' }) %>
+<div class="login-card">
+  <a class="login-brand" href="/"><span class="brand-symbol" aria-hidden="true">لـ</span><strong><%= typeof settings !== 'undefined' && settings.businessName ? settings.businessName : 'لمسة المستقبل' %></strong></a>
+  <div class="login-rule"></div>
+  <p class="eyebrow">إدارة الموقع</p><h1>أهلًا بعودتك</h1><p class="muted">سجّل الدخول لإدارة أعمالك ومحتوى موقعك.</p>
+  <form action="/admin/login" method="post">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label class="field"><span>البريد الإلكتروني</span><input name="email" type="email" dir="ltr" required autocomplete="username" maxlength="254" value="<%= typeof email !== 'undefined' ? email : '' %>" placeholder="you@example.com"></label>
+    <label class="field"><span>كلمة المرور</span><span class="password-wrap"><input name="password" id="login-password" type="password" required autocomplete="current-password" maxlength="256"><button type="button" class="password-toggle" data-password-toggle aria-controls="login-password" aria-label="إظهار كلمة المرور">إظهار</button></span></label>
+    <button class="button button-primary full-width" type="submit" data-submit-label="جارٍ تسجيل الدخول…">تسجيل الدخول <span aria-hidden="true">←</span></button>
+  </form>
+  <a class="login-back" href="/">العودة إلى الموقع <span aria-hidden="true">↗</span></a>
+</div>
+<%- include('partials/footer') %>
