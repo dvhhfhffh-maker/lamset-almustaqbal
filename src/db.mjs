@@ -94,6 +94,26 @@ export function createDatabase(path = process.env.DATABASE_PATH || './data/site.
     getUserByEmail: email=>sqlite.prepare('SELECT * FROM Users WHERE email=? COLLATE NOCASE').get(email),
     getUser: id=>sqlite.prepare('SELECT id,email,role,createdAt FROM Users WHERE id=?').get(id),
     countUsers:()=>sqlite.prepare('SELECT COUNT(*) AS count FROM Users').get().count,
+    issueAdminSetupToken(tokenHash,expiresAt) {
+      sqlite.exec('BEGIN IMMEDIATE');
+      try {
+        sqlite.prepare('DELETE FROM AdminSetupTokens').run();
+        if(api.countUsers()===0)sqlite.prepare('INSERT INTO AdminSetupTokens(tokenHash,expiresAt) VALUES(?,?)').run(tokenHash,expiresAt);
+        sqlite.exec('COMMIT');
+      } catch(error) {sqlite.exec('ROLLBACK');throw error;}
+    },
+    getAdminSetupToken:tokenHash=>api.countUsers()===0?sqlite.prepare('SELECT tokenHash,expiresAt FROM AdminSetupTokens WHERE tokenHash=? AND expiresAt>?').get(tokenHash,Date.now()):null,
+    consumeAdminSetupToken(tokenHash,email,passwordHash) {
+      sqlite.exec('BEGIN IMMEDIATE');
+      try {
+        if(api.countUsers()>0||!api.getAdminSetupToken(tokenHash)){sqlite.exec('ROLLBACK');return null;}
+        const id=randomUUID();
+        sqlite.prepare('INSERT INTO Users(id,email,passwordHash,role,createdAt) VALUES(?,?,?,?,?)').run(id,email.toLowerCase(),passwordHash,'admin',now());
+        sqlite.prepare('DELETE FROM AdminSetupTokens').run();
+        sqlite.exec('COMMIT');
+        return api.getUser(id);
+      } catch(error) {sqlite.exec('ROLLBACK');throw error;}
+    },
     saveSession(tokenHash,session) {
       sqlite.prepare('INSERT INTO Sessions(tokenHash,userId,csrfToken,expiresAt) VALUES(?,?,?,?)').run(tokenHash,session.userId||null,session.csrfToken,session.expiresAt);
     },
