@@ -28,11 +28,11 @@ function publicData(db) {
 }
 function businessSchema(settings,base) {
   const name=settings.businessName||settings.siteName||settings.name||'لمسة المستقبل';
-  const schema={'@context':'https://schema.org','@type':'HomeAndConstructionBusiness','@id':base+'/#business',name,url:base,telephone:settings.phone||'+966501308295',
+  const schema={'@context':'https://schema.org','@type':['LocalBusiness','HomeAndConstructionBusiness'],'@id':base+'/#business',name,url:base,telephone:settings.phone||'+966501308295',
     description:settings.description||'دهانات وديكورات وترميم وتجديد منازل في الرياض.',
     address:{'@type':'PostalAddress',addressLocality:'الرياض',addressRegion:'الرياض',addressCountry:'SA'},
     areaServed:{'@type':'City',name:'الرياض'},image:absolute(settings.ogImage||'',base)};
-  if(settings.address)schema.address.streetAddress=settings.address;
+  if(settings.officialStreetAddress)schema.address.streetAddress=settings.officialStreetAddress;
   if(settings.logo)schema.logo=absolute(settings.logo,base);
   return schema;
 }
@@ -73,7 +73,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     res.locals.waUrl='https://wa.me/'+String(settings.whatsapp||'966501308295').replace(/\D/g,'')+'?text='+encodeURIComponent(settings.whatsappMessage||whatsappMessage);
     res.locals.telUrl='tel:'+phoneValue(settings.phone||'+966501308295');
     res.locals.requestPath=req.path;res.locals.flash='';res.locals.errors=[];res.locals.formValues={};
-    res.locals.item=null;res.locals.schema=[];res.locals.canonical='';res.locals.description='';
+    res.locals.item=null;res.locals.schema=[];res.locals.canonical='';res.locals.description='';res.locals.pageImage='';res.locals.keywords='';
     next();
   });
   function renderPage(req,res,view,{item=null,status=200,errors=[],formValues={},title,description,flash}={}) {
@@ -83,7 +83,11 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     const seo=db.list('seo').find(record=>record.data?.path===req.path||record.slug===req.path.slice(1));
     const pageTitle=title||seo?.data?.seoTitle||seo?.title||item?.data?.seoTitle||(view==='home'?settings.metaTitle||name+' | دهانات وديكورات وترميم في الرياض':label+' | '+name);
     const pageDescription=description||seo?.data?.metaDescription||seo?.description||item?.data?.metaDescription||item?.description||settings.metaDescription||settings.description||'دهانات وديكورات وجبس بورد وترميم وتجديد منازل في الرياض وشمال الرياض.';
-    const canonical=base+(req.path==='/'?'':req.path);
+    const canonical=base+(req.path==='/'?'':req.path.replace(/\/$/,''));
+    const pageImage=absolute(safeUrl(seo?.data?.ogImage||seo?.image||item?.data?.ogImage||item?.image||settings.ogImage),base);
+    const keywordValue=seo?.data?.keywords||item?.data?.keywords||settings.keywords||[];
+    const keywords=Array.isArray(keywordValue)?keywordValue.join(', '):textValue(keywordValue,2000);
+    if(status!==200)res.set('X-Robots-Tag','noindex, nofollow');
     const schema=[businessSchema(settings,base)];
     if(view!=='home'&&status===200)schema.push({'@context':'https://schema.org','@type':'BreadcrumbList',itemListElement:[
       {'@type':'ListItem',position:1,name:'الرئيسية',item:base},
@@ -94,7 +98,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     if(view==='article')schema.push({'@context':'https://schema.org','@type':'Article',headline:item.title,description:pageDescription,image:absolute(item.image,base),
       datePublished:item.data?.date||item.createdAt,dateModified:item.updatedAt,author:{'@type':'Organization',name:item.data?.author||name},
       publisher:{'@id':base+'/#business'},mainEntityOfPage:canonical});
-    res.status(status).render('page',{view,item,title:pageTitle,description:pageDescription,canonical,schema,errors,formValues,flash:flash??(req.query.sent==='1'?'تم حفظ طلبك بنجاح. سنتواصل معك لمناقشة التفاصيل.':'')});
+    res.status(status).render('page',{view,item,title:pageTitle,description:pageDescription,canonical,schema,pageImage,keywords,errors,formValues,flash:flash??(req.query.sent==='1'?'تم حفظ طلبك بنجاح. سنتواصل معك لمناقشة التفاصيل.':'')});
   }
   app.get('/robots.txt',(req,res)=>{
     const base=baseURL(req,res.locals.settings);
