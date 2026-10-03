@@ -204,9 +204,9 @@ test('before and after comparison handles pointer and keyboard changes accessibl
     area: 'الرياض', district: 'النرجس',
   }, { beforeImage: samplePhoto, afterImage: samplePhoto });
   await page.goto('/before-after');
-  const comparison = page.locator('[data-compare]').filter({ hasText: 'مقارنة تجديد غرفة ' + suffix });
+  const range = page.getByRole('slider', { name: 'مقارنة قبل وبعد: مقارنة تجديد غرفة ' + suffix, exact: true });
+  const comparison = range.locator('..');
   await expect(comparison).toBeVisible();
-  const range = comparison.locator('[data-compare-range]');
   await range.focus();
   await page.keyboard.press('Home');
   await expect.poll(() => comparison.evaluate(element => element.style.getPropertyValue('--compare'))).toBe('0%');
@@ -329,7 +329,12 @@ test('slider image upload and duration can be managed from the admin form', asyn
   await page.reload();
   expect(await rows.evaluateAll(elements => elements.map(element => element.dataset.recordId))).toEqual(changedOrder);
   await page.goto('/');
-  expect(await page.locator('[data-slide] img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toContain(uploadedURL);
+  const slideIndex = await page.locator('[data-slide] img').evaluateAll((elements, url) => elements.findIndex(element => element.getAttribute('src') === url || element.dataset.src === url), uploadedURL);
+  expect(slideIndex).toBeGreaterThanOrEqual(0);
+  await page.locator('[data-carousel-dot][data-index="' + slideIndex + '"]').click();
+  const image = page.locator('[data-slide].is-active img');
+  await expect(image).toHaveAttribute('src', uploadedURL);
+  await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0)).toBe(true);
 });
 
 test('reduced motion disables automatic carousel advancement', async ({ page }) => {
