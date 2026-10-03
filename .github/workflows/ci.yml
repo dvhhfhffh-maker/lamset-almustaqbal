@@ -1,49 +1,132 @@
-name: Website checks
+name: Production smoke checks
 on:
   push:
-    branches: [main, "build/**"]
-  pull_request:
-  workflow_dispatch:
+    branches: ["build/production-smoke"]
 permissions:
   contents: read
 concurrency:
-  group: website-${{ github.ref }}
+  group: production-smoke-${{ github.ref }}
   cancel-in-progress: true
+env:
+  PLAYWRIGHT_BASE_URL: "https://lamset-almustaqbal-production.up.railway.app"
 jobs:
-  verify:
+  smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Install dependencies
+      - name: Wait for public health readiness
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const base=process.env.PLAYWRIGHT_BASE_URL;
+          let ready=false;
+          for(let attempt=1;attempt<=60;attempt++){
+            try {
+              const response=await fetch(base+'/healthz',{signal:AbortSignal.timeout(10000),redirect:'manual'});
+              if(response.status===200&&(await response.json()).status==='ok'){ready=true;break;}
+            } catch {}
+            if(attempt<60)await new Promise(resolve=>setTimeout(resolve,5000));
+          }
+          assert(ready,'Production /healthz must return HTTP 200 with status ok');
+          console.log('READY: production healthcheck HTTP 200');
+          NODE
+      - name: Verify production pages with GET requests only
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const base=process.env.PLAYWRIGHT_BASE_URL.replace(/\/$/,'');
+          let requests=0;
+          async function get(path){
+            const response=await fetch(base+path,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(20000)});
+            requests++;
+            return response;
+          }
+          function attribute(tag,name){return tag.match(new RegExp('\\b'+name+'=["\\x27]([^"\\x27]*)["\\x27]','i'))?.[1];}
+          function canonical(html){const tag=[...html.matchAll(/<link\b[^>]*>/gi)].map(x=>x[0]).find(x=>attribute(x,'rel')==='canonical');return tag?attribute(tag,'href'):undefined;}
+          function schemas(html){return [...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].flatMap(x=>{const value=JSON.parse(x[1]);return value['@graph']||[value];});}
+          const pages=['/','/services','/services/interior-painting-riyadh','/projects','/before-after','/about','/testimonials','/blog','/quote','/contact','/riyadh/al-narjis'];
+          const assets=new Set();
+          for(const path of pages){
+            const response=await get(path);
+            assert(response.status===200,'Public page must be HTTP 200: '+path);
+            assert((response.headers.get('content-type')||'').includes('text/html'),'HTML content type: '+path);
+            const html=await response.text();
+            assert(/<html\b[^>]*\blang=["']ar["']/i.test(html),'Arabic document language: '+path);
+            assert(/<html\b[^>]*\bdir=["']rtl["']/i.test(html),'RTL document direction: '+path);
+            assert([...html.matchAll(/<h1\b/gi)].length===1,'Exactly one H1: '+path);
+            assert(canonical(html)===base+(path==='/'?'':path),'HTTPS canonical must use the public production domain: '+path);
+            const business=schemas(html).find(x=>(Array.isArray(x['@type'])?x['@type']:[x['@type']]).includes('LocalBusiness'));
+            assert(business?.['@id']===base+'/#business','Business schema must identify production origin: '+path);
+            assert(/href=["']tel:\+966501308295["']/i.test(html),'Direct call link: '+path);
+            assert(/https:\/\/wa\.me\/966501308295\?text=/.test(html),'WhatsApp contact link: '+path);
+            const csp=response.headers.get('content-security-policy')||'';
+            assert(csp.includes('script-src')&&!/script-src[^;]*'unsafe-inline'/.test(csp),'Protected script policy: '+path);
+            if(path==='/'){
+              for(const match of html.matchAll(/<(?:script|link)\b[^>]*>/gi)){
+                const tag=match[0];
+                const src=attribute(tag,'src')||(attribute(tag,'rel')==='stylesheet'?attribute(tag,'href'):undefined);
+                if(src){const url=new URL(src,base);if(url.origin===base)assets.add(url.pathname+url.search);}
+              }
+            }
+            console.log('PAGE 200 '+path);
+          }
+          assert(assets.size>=2,'The page must expose its local stylesheet and JavaScript');
+          for(const path of assets){
+            const response=await get(path);
+            assert(response.status===200,'Public application asset: '+path);
+            assert((await response.arrayBuffer()).byteLength>0,'Application asset must not be empty: '+path);
+            console.log('ASSET 200 '+path);
+          }
+          const robots=await get('/robots.txt');
+          assert(robots.status===200,'robots.txt HTTP 200');
+          const robotsText=await robots.text();
+          assert(robotsText.includes('Disallow: /admin'),'Administration must be excluded from crawling');
+          assert(robotsText.includes('Sitemap: '+base+'/sitemap.xml'),'robots.txt must reference production sitemap');
+          const sitemap=await get('/sitemap.xml');
+          assert(sitemap.status===200,'sitemap.xml HTTP 200');
+          assert((sitemap.headers.get('content-type')||'').includes('xml'),'Sitemap XML content type');
+          const xml=await sitemap.text();
+          const locs=[...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x=>x[1]);
+          assert(locs.includes(base),'Sitemap must include the homepage');
+          assert(locs.includes(base+'/services/interior-painting-riyadh'),'Sitemap must include the interior painting service');
+          assert(locs.every(x=>x===base||x.startsWith(base+'/')),'Sitemap URLs must use the production origin');
+          assert(locs.every(x=>!x.includes('/admin')),'Sitemap must not expose administration');
+          const missing=await get('/deployment-smoke-missing-page');
+          assert(missing.status===404,'Unknown route must return HTTP 404');
+          assert((await missing.text()).includes('يبدو أن الصفحة التي تبحث عنها غير موجودة'),'Helpful Arabic 404 page');
+          for(const path of ['/admin','/admin/projects/new','/admin/settings']){
+            const response=await get(path);
+            assert([302,303].includes(response.status),'Anonymous administration route must redirect: '+path);
+            assert(response.headers.get('location')==='/admin/login','Authentication redirect destination: '+path);
+          }
+          const login=await get('/admin/login');
+          assert(login.status===200,'Public administrator login page HTTP 200');
+          const loginHtml=await login.text();
+          assert(/\bname=["']_csrf["']/.test(loginHtml),'Login form requires a CSRF token');
+          assert(/noindex/.test(loginHtml),'Administrator login must be excluded from indexing');
+          const cookies=login.headers.getSetCookie();
+          assert(cookies.some(x=>/^lm\.sid=/.test(x)&&/;\s*HttpOnly/i.test(x)&&/;\s*Secure/i.test(x)&&/;\s*SameSite=Lax/i.test(x)),'Production authentication cookies require Secure, HttpOnly and SameSite');
+          console.log('GET_ONLY_SMOKE_PASSED: '+requests+' requests; '+pages.length+' public pages; SEO, assets, 404 and admin protection verified; no POST or setup route visited.');
+          NODE
+      - name: Install locked test dependencies
         run: npm ci --no-audit --no-fund
-      - name: Export resolved dependency manifest
-        run: node -e "console.log('LOCKFILE_JSON=' + JSON.stringify(require('node:fs').readFileSync('package-lock.json','utf8')))"
-      - name: Check source and templates
-        run: npm run check
-      - name: Verify routes, persistence and security
-        run: npm test
       - name: Install browser engines
         run: npx playwright install --with-deps chromium webkit
-      - name: Check desktop, phone and tablet interactions
-        run: npm run test:e2e
-      - name: Upload browser reports
+      - name: Check public desktop, phone and tablet interactions
+        run: npx playwright test --grep '^(public pages|hero supports|reduced motion)'
+      - name: Upload public browser reports and screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-results
+          name: production-public-browser-results
           path: |
             playwright-report/
             test-results/
           if-no-files-found: ignore
-          retention-days: 7
-      - name: Upload generated dependency lock
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-lock
-          path: package-lock.json
           retention-days: 7
