@@ -25,9 +25,17 @@ export function createDatabase(path = process.env.DATABASE_PATH || './data/site.
     return collectionTables[key];
   }
   function getSettings() {
-    return Object.fromEntries(sqlite.prepare('SELECT key,value FROM Settings').all().map(row => [row.key, parse(row.value)]));
+    const settings=Object.fromEntries(sqlite.prepare('SELECT key,value FROM Settings').all().map(row => [row.key, parse(row.value)]));
+    settings.stats=settings.statistics=Array.isArray(settings.statistics)?settings.statistics:(settings.stats||[]);
+    settings.mapsUrl=settings.mapUrl=settings.mapUrl||settings.mapsUrl||'';
+    return settings;
   }
   function saveSettings(settings) {
+    settings={...settings};
+    if(Object.hasOwn(settings,'stats'))settings.statistics=settings.stats;
+    else if(Object.hasOwn(settings,'statistics'))settings.stats=settings.statistics;
+    if(Object.hasOwn(settings,'mapsUrl'))settings.mapUrl=settings.mapsUrl;
+    else if(Object.hasOwn(settings,'mapUrl'))settings.mapsUrl=settings.mapUrl;
     sqlite.exec('BEGIN IMMEDIATE');
     try {
       const put = sqlite.prepare('INSERT INTO Settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
@@ -50,7 +58,7 @@ export function createDatabase(path = process.env.DATABASE_PATH || './data/site.
       id,normalized.slug,normalized.title,normalized.description,normalized.image,Number(normalized.enabled),normalized.position,JSON.stringify(normalized.data),stored?.createdAt||date,date);
     if(key==='projects') {
       sqlite.prepare('DELETE FROM ProjectImages WHERE projectId=?').run(id);
-      const images=Array.isArray(normalized.data.gallery)?normalized.data.gallery:[];
+      const images=Array.isArray(normalized.data.images)?normalized.data.images:(Array.isArray(normalized.data.gallery)?normalized.data.gallery:[]);
       const put=sqlite.prepare('INSERT INTO ProjectImages(id,projectId,image,alt,position) VALUES(?,?,?,?,?)');
       images.forEach((image,i)=>put.run(randomUUID(),id,typeof image==='string'?image:image.image||image.url||'',typeof image==='string'?normalized.title:image.alt||normalized.title,i));
     }
