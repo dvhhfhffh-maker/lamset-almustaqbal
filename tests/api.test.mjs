@@ -506,3 +506,176 @@ test('managed categories, project flags, customer names and offers appear on the
   assert.equal(unsafeLink.status, 303);
   assert.equal(app.locals.db.get('offers', 'managed-unsafe-link', { all: true }).data.buttonUrl, '', 'Advanced JSON URLs must use the same safety checks as visible form fields');
 });
+
+function customerReviews() {
+  return app.locals.db.list('testimonials', { all: true }).filter(record => record.data.source === 'customer');
+}
+
+function reviewFields(changes = {}) {
+  return {
+    name: 'عميل تقييم مستقل', rating: '5', service: 'interior-painting-riyadh',
+    district: 'النرجس', comment: 'تجربة ممتازة في دهانات المجلس', consent: 'on', website: '',
+    ...changes,
+  };
+}
+
+test('customer reviews remain private until approved, publish escaped text and can be unpublished', async () => {
+  const customer = new Client();
+  const token = await customer.token('/testimonials');
+  const service = app.locals.db.get('services', 'interior-painting-riyadh');
+  const name = 'عميل مراجعة دورة النشر';
+  const comment = 'عمل متقن <script>window.reviewLifecycleAttack=1</script> مع اهتمام بالتفاصيل';
+  const submitted = await customer.post('/testimonials', reviewFields({
+    name, comment, id: 'forged-review-id', enabled: '1', moderationStatus: 'published',
+    source: 'admin', dataJSON: '{"source":"admin","moderationStatus":"published"}',
+  }), token);
+  assert.equal(submitted.status, 303);
+  assert.equal(submitted.headers.get('location'), '/testimonials?review=sent#write-review');
+  assert.equal(customerReviews().length, 1);
+  let review = customerReviews()[0];
+  assert.notEqual(review.id, 'forged-review-id', 'Customers cannot choose or replace a record identifier');
+  assert.equal(review.title, name);
+  assert.equal(review.description, comment);
+  assert.equal(review.enabled, false, 'A submission must never publish itself');
+  assert.equal(review.data.source, 'customer');
+  assert.equal(review.data.moderationStatus, 'pending');
+  assert.equal(review.data.clientName, name);
+  assert.equal(review.data.rating, 5);
+  assert.equal(review.data.area, 'النرجس');
+  assert.equal(review.data.service, service.title);
+  assert.equal(review.data.serviceSlug, service.slug);
+  assert.equal(review.data.consent, true);
+  assert.equal(new Date(review.data.submittedAt).toISOString(), review.data.submittedAt);
+  assert.equal(app.locals.db.list('testimonials').some(record => record.id === review.id), false);
+  for (const route of ['/', '/testimonials']) {
+    const html = await (await customer.request(route)).text();
+    assert.ok(!html.includes(name), 'Pending client identity must stay off public pages: ' + route);
+    assert.ok(!html.includes('reviewLifecycleAttack'), 'Pending feedback must stay private: ' + route);
+  }
+  const anonymousApproval = await customer.post('/admin/testimonials/' + review.id + '/approve', {}, token);
+  assert.ok([302, 303].includes(anonymousApproval.status));
+  assert.equal(anonymousApproval.headers.get('location'), '/admin/login');
+  assert.equal(app.locals.db.get('testimonials', review.id, { all: true }).enabled, false);
+
+  const admin = new Client();
+  const adminToken = await admin.login();
+  const moderation = await admin.request('/admin/testimonials');
+  assert.equal(moderation.status, 200);
+  const moderationHtml = await moderation.text();
+  assert.ok(moderationHtml.includes(name), 'The administrator must see pending submissions');
+  assert.ok(moderationHtml.includes('/admin/testimonials/' + review.id + '/approve'), 'Moderation must offer an approval action');
+  assert.ok(moderationHtml.includes('بانتظار الاعتماد'));
+  assert.equal((await admin.post('/admin/testimonials/' + review.id + '/approve', {}, 'forged-csrf')).status, 403);
+  assert.equal(app.locals.db.get('testimonials', review.id, { all: true }).enabled, false);
+  const approved = await admin.post('/admin/testimonials/' + review.id + '/approve', {}, adminToken);
+  assert.equal(approved.status, 303);
+  assert.equal(approved.headers.get('location'), '/admin/testimonials?saved=1');
+  review = app.locals.db.get('testimonials', review.id);
+  assert.equal(review.enabled, true);
+  assert.equal(review.data.moderationStatus, 'published');
+  for (const route of ['/', '/testimonials']) {
+    const html = await (await customer.request(route)).text();
+    assert.ok(html.includes(name), 'Approved feedback must appear publicly: ' + route);
+    assert.match(html, /&lt;script&gt;window\.reviewLifecycleAttack=1&lt;\/script&gt;/);
+    assert.doesNotMatch(html, /<script>window\.reviewLifecycleAttack=1<\/script>/);
+  }
+  assert.equal((await admin.post('/admin/testimonials/nonexistent-review/approve', {}, adminToken)).status, 404);
+  const hidden = await admin.request('/admin/testimonials/save', {
+    method: 'POST', body: multipart({
+      id: review.id, title: review.title, slug: review.slug, description: review.description,
+      clientName: name, rating: '5', area: 'النرجس', dataJSON: JSON.stringify(review.data),
+    }, adminToken),
+  });
+  assert.equal(hidden.status, 303);
+  const unpublished = app.locals.db.get('testimonials', review.id, { all: true });
+  assert.equal(unpublished.enabled, false);
+  assert.equal(unpublished.data.moderationStatus, 'pending');
+  assert.ok(!(await (await customer.request('/testimonials')).text()).includes(name), 'Disabling a customer review must remove it from the public slider');
+});
+
+test('customer review validation rejects out-of-range names and non-integer ratings', async () => {
+  const client = new Client();
+  const token = await client.token('/testimonials');
+  const invalid = [
+    { name: 'أ' }, { name: 'أ'.repeat(81) }, { rating: '0' }, { rating: '6' }, { rating: '1.5' },
+  ];
+  for (const changes of invalid) {
+    const response = await client.post('/testimonials', reviewFields(changes), token);
+    assert.equal(response.status, 422, 'Invalid review values must be rejected: ' + Object.keys(changes).join(','));
+    assert.equal(customerReviews().length, 0, 'Invalid input must never become a pending review');
+  }
+});
+
+test('customer review validation enforces comment, district, consent and service boundaries', async () => {
+  const client = new Client();
+  const token = await client.token('/testimonials');
+  const invalid = [
+    { comment: 'لا' }, { comment: 'ر'.repeat(2001) }, { district: 'ح'.repeat(121) },
+    { consent: 'yes' }, { service: 'not-a-real-service' },
+  ];
+  for (const changes of invalid) {
+    const response = await client.post('/testimonials', reviewFields(changes), token);
+    assert.equal(response.status, 422, 'Invalid feedback must produce a validation response');
+    assert.equal(customerReviews().length, 0);
+  }
+});
+
+test('customer reviews accept short and boundary-length feedback but reject disabled services and IDs', async () => {
+  const client = new Client();
+  const token = await client.token('/testimonials');
+  const service = app.locals.db.get('services', 'interior-painting-riyadh');
+  assert.equal((await client.post('/testimonials', reviewFields({ service: service.id }), token)).status, 422, 'Service IDs must not be accepted as slugs');
+  app.locals.db.save('services', { ...service, enabled: false });
+  assert.equal((await client.post('/testimonials', reviewFields({ service: service.slug }), token)).status, 422, 'Disabled services cannot be selected by a customer');
+  assert.equal(customerReviews().length, 0);
+  const boundaries = [
+    { name: 'أح', comment: 'رأي', rating: '1', district: '', service: '' },
+    { name: 'ن'.repeat(80), comment: 'ر'.repeat(2000), rating: '5', district: 'ح'.repeat(120), service: 'gypsum-board-riyadh' },
+    { name: 'عميل تعليق قصير', comment: 'ممتاز', rating: '4', service: '' },
+  ];
+  for (const fields of boundaries) {
+    const response = await client.post('/testimonials', reviewFields(fields), token);
+    assert.equal(response.status, 303, 'Legitimate short and maximum-length comments must be accepted');
+    const review = customerReviews().find(record => record.title === fields.name);
+    assert.ok(review);
+    assert.equal(review.description, fields.comment);
+    assert.equal(review.data.rating, Number(fields.rating));
+    assert.equal(review.data.area, fields.district ?? 'النرجس');
+    assert.equal(review.enabled, false);
+    assert.equal(review.data.serviceSlug, fields.service);
+    assert.equal(review.data.service, fields.service ? app.locals.db.get('services', fields.service).title : '');
+  }
+  assert.equal(customerReviews().length, 3);
+});
+
+test('customer feedback requires same-origin CSRF protection and honeypots never persist records', async () => {
+  const client = new Client();
+  const token = await client.token('/testimonials');
+  const missing = await client.request('/testimonials', { method: 'POST', body: new URLSearchParams(reviewFields()) });
+  assert.equal(missing.status, 403);
+  assert.equal((await client.post('/testimonials', reviewFields(), 'forged-token')).status, 403);
+  const crossOrigin = await client.request('/testimonials', {
+    method: 'POST', headers: { Origin: 'https://unrelated.example.test' },
+    body: new URLSearchParams({ ...reviewFields(), _csrf: token }),
+  });
+  assert.equal(crossOrigin.status, 403);
+  const honeypot = await client.post('/testimonials', reviewFields({ website: 'https://spam.example.test' }), token);
+  assert.equal(honeypot.status, 303, 'Bots receive the same response without creating public or pending content');
+  assert.equal(honeypot.headers.get('location'), '/testimonials?review=sent#write-review');
+  assert.equal((await client.post('/testimonials', reviewFields({ website: 'https://spam.example.test' }), 'forged-token')).status, 403, 'The honeypot must never bypass CSRF');
+  assert.equal(customerReviews().length, 0);
+});
+
+test('customer feedback has its own five-per-hour submission limit', async () => {
+  const client = new Client();
+  const token = await client.token('/testimonials');
+  for (let index = 0; index < 5; index += 1) {
+    const response = await client.post('/testimonials', reviewFields({ name: 'عميل حد التقييم ' + index }), token);
+    assert.equal(response.status, 303, 'The first five valid submissions should remain available');
+  }
+  const blocked = await client.post('/testimonials', reviewFields({ name: 'عميل يتجاوز الحد' }), token);
+  assert.equal(blocked.status, 429, 'A sixth submission within the hour must be blocked');
+  assert.ok(Number(blocked.headers.get('retry-after')) > 0, 'The rate limit should indicate when the client can retry');
+  assert.equal(customerReviews().length, 5, 'A blocked submission must not be saved');
+  assert.ok(customerReviews().every(record => !record.enabled), 'The rate limit must not alter moderation');
+});
