@@ -148,8 +148,17 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
   app.use((req,res)=>renderPage(req,res,'notfound',{status:404}));
   app.use((error,req,res,next)=>{
     if(res.headersSent)return next(error);
+    if(!res.locals.settings) {
+      Object.assign(res.locals,publicData(db),{item:null,schema:[],canonical:'',description:'',pageImage:'',keywords:'',flash:'',errors:[],formValues:{},requestPath:req.path});
+      const settings=res.locals.settings;
+      res.locals.waUrl='https://wa.me/'+String(settings.whatsapp||'966501308295').replace(/\\D/g,'')+'?text='+encodeURIComponent(settings.whatsappMessage||whatsappMessage);
+      res.locals.telUrl='tel:'+phoneValue(settings.phone||'+966501308295');
+    }
+    if(!req.session)sessions.issue(req,res);
+    if(!res.locals.collections)res.locals.collections=[];
+    if(!res.locals.active)res.locals.active='';
     const status=error.code==='LIMIT_FILE_SIZE'?413:error.name==='MulterError'?422:error.status||500;
-    const message=status===413?'حجم الصورة يتجاوز 5 ميجابايت.':error.name==='MulterError'?'عدد الصور أو بيانات الرفع غير مسموح به.':status<500?error.message:'تعذر تنفيذ الطلب الآن. حاول مرة أخرى.';
+    const message=status===413?'حجم الملف أو بيانات النموذج يتجاوز الحد المسموح.':error.name==='MulterError'?'عدد الصور أو بيانات الرفع غير مسموح به.':status<500?error.message:'تعذر تنفيذ الطلب الآن. حاول مرة أخرى.';
     if(status>=500&&!testing)console.error('Request failed:',error);
     if(req.path.startsWith('/admin')) {
       if(!req.adminUser)return res.status(status).render('admin/login',{title:'دخول الإدارة',email:'',hasAdmin:db.countUsers()>0,errors:[message],collections:[],active:''});
