@@ -1,0 +1,6 @@
+<section class="page-head"><div class="container">
+<nav class="breadcrumbs" aria-label="مسار الصفحة"><a href="/">الرئيسية</a><span>/</span><% if(view==='service') { %><a href="/services">خدماتنا</a><span>/</span><% } else if(view==='article') { %><a href="/blog">المدونة</a><span>/</span><% } else if(view==='project') { %><a href="/projects">أعمالنا</a><span>/</span><% } %><span aria-current="page"><%= item ? item.title : ({services:'خدماتنا',projects:'أعمالنا','before-after':'قبل وبعد',about:'من نحن',testimonials:'آراء العملاء',blog:'المدونة',quote:'طلب عرض سعر',contact:'تواصل معنا',notfound:'صفحة غير موجودة'}[view] || title) %></span></nav>
+<p class="eyebrow">لمسة المستقبل · الرياض</p>
+<h1><%= item ? item.title : ({services:'لكل مساحة، لمستها الخاصة',projects:'مساحات تُلهمك', 'before-after':'بداية جديدة لمنزلك',about:'شغف بالتفاصيل. عناية بمنزلك.',testimonials:'تجربتكم تصنع الفارق',blog:'أفكار تستحق أن تعيشها',quote:'من هنا تبدأ مساحة أجمل',contact:'نتطلع لسماع أفكارك',notfound:'يبدو أن الصفحة التي تبحث عنها غير موجودة.'}[view] || title) %></h1>
+<p><%= item ? item.description : description %></p>
+</div></section>

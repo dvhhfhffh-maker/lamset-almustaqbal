@@ -1,0 +1,22 @@
+<header class="site-header" data-header>
+<div class="header-inner container">
+<a href="/" class="brand" aria-label="<%= settings.siteName %> — الرئيسية">
+<% if(settings.logo) { %><img class="brand-image" src="<%= settings.logo %>" alt="<%= settings.siteName %>" width="180" height="54"><% } else { %>
+<span class="brand-mark"><span>لـ</span><i></i></span>
+<span class="brand-name"><strong><%= settings.siteName %></strong><small>للدهانات والديكور والتجديد</small></span><% } %>
+</a>
+<nav class="desktop-nav" aria-label="التنقل الرئيسي">
+<a href="/" class="<%= view==='home'?'active':'' %>">الرئيسية</a>
+<a href="/services" class="<%= ['services','service'].includes(view)?'active':'' %>">خدماتنا</a>
+<a href="/projects" class="<%= ['projects','project'].includes(view)?'active':'' %>">أعمالنا</a>
+<a href="/before-after" class="<%= view==='before-after'?'active':'' %>">قبل وبعد</a>
+<a href="/about" class="<%= view==='about'?'active':'' %>">من نحن</a>
+<details class="nav-more"><summary>المزيد</summary><div><a href="/projects#featured">مشاريعنا</a><a href="/testimonials">آراء العملاء</a><a href="/blog">المدونة</a><a href="/contact">تواصل معنا</a></div></details>
+</nav>
+<a class="button button-small header-quote" href="/quote">طلب عرض سعر <%- include('icon',{name:'quote'}) %></a>
+<button class="icon-button menu-toggle" data-menu-toggle aria-controls="mobile-menu" aria-expanded="false" aria-label="فتح القائمة"><%- include('icon',{name:'menu'}) %></button>
+</div>
+<nav id="mobile-menu" class="mobile-menu" data-mobile-menu hidden aria-label="التنقل على الهاتف">
+<a href="/">الرئيسية</a><a href="/services">خدماتنا</a><a href="/projects">أعمالنا</a><a href="/before-after">قبل وبعد</a><a href="/projects#featured">مشاريعنا</a><a href="/about">من نحن</a><a href="/testimonials">آراء العملاء</a><a href="/blog">المدونة</a><a href="/quote">طلب عرض سعر</a><a href="/contact">تواصل معنا</a>
+<a href="<%= telUrl %>" class="mobile-menu-phone"><span dir="ltr"><%= settings.phone %></span><%- include('icon',{name:'phone'}) %></a>
+</nav></header>

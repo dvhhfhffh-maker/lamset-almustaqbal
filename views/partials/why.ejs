@@ -1,0 +1,4 @@
+<section class="section why-section"><div class="container why-layout">
+<div class="why-intro" data-reveal><p class="eyebrow">لماذا لمسة المستقبل؟</p><h2><%= settings.whyHeading || 'راحة بالك تبدأ باختيارك' %></h2><p><%= settings.homeIntroText || settings.aboutText %></p><a class="text-link" href="/about">تعرّف علينا <span class="small-rule"></span></a><span class="why-brand">لمسة تُحدث فرقًا</span></div>
+<div class="why-grid"><% (settings.whyPoints || []).forEach(point=> { %><article data-reveal><span class="why-icon"><%- include('icon',{name:point.icon || 'check'}) %></span><h3><%= point.title %></h3><p><%= point.text %></p></article><% }) %></div>
+</div></section>

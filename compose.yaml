@@ -1,0 +1,15 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/site.db
+      UPLOADS_DIR: /app/data/uploads
+    volumes:
+      - site-data:/app/data
+    restart: unless-stopped
+volumes:
+  site-data:
