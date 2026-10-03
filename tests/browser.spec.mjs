@@ -70,8 +70,8 @@ async function saveFixture(page, collection, fields, uploads = {}) {
   (page.__cleanupRecords ||= []).push({ collection, id });
 }
 
-async function fillField(page, name, value) {
-  const field = page.locator('[name="' + name + '"]').first();
+async function fillField(scope, name, value) {
+  const field = scope.locator('[name="' + name + '"]').first();
   if (await field.evaluate(element => element.tagName === 'SELECT')) {
     const option = await field.locator('option').evaluateAll((options, desired) => {
       const match = options.find(option => option.label === desired || option.value === desired);
@@ -241,7 +241,7 @@ test('quote form validates files and phone before saving a complete request', as
   for (const [field, value] of Object.entries({
     name, phone: '٠٥٠١٣٠٨٢٩٥', whatsapp: '+966501308295', area: 'الرياض', district: 'النرجس',
     service: 'دهانات داخلية', propertyType: 'فيلا', description: 'دهان مجلس وصالة ومعالجة التشققات',
-  })) await fillField(page, field, value);
+  })) await fillField(form, field, value);
   await file.setInputFiles({ name: 'room.png', mimeType: 'image/png', buffer: samplePhoto });
   for (const checkbox of await form.locator('input[type="checkbox"][required]').all()) await checkbox.check();
   await form.locator('[data-submit]').click();
