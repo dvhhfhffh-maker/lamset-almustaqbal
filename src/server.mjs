@@ -16,7 +16,7 @@ const whatsappMessage='السلام عليكم، شاهدت موقع لمسة ا
 const pageLabels={home:'الرئيسية',services:'خدماتنا',projects:'أعمالنا ومشاريعنا','before-after':'قبل وبعد',about:'من نحن',testimonials:'آراء العملاء',blog:'المدونة',quote:'طلب عرض سعر',contact:'تواصل معنا',notfound:'الصفحة غير موجودة'};
 const xml=value=>String(value).replace(/[<>&"']/g,char=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[char]));
 const baseURL=(req,settings)=>{
-  const configured=safeUrl(settings.siteUrl);
+  const configured=safeUrl(settings.siteUrl||process.env.SITE_URL);
   if(configured&&!configured.startsWith('/'))return configured.replace(/\/$/,'');
   const host=req.get('host')||'localhost';
   return req.protocol+'://'+(/^[a-z0-9.-]+(?::\d{1,5})?$/i.test(host)?host:'localhost');
