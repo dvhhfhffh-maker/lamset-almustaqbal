@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { rateLimit } from 'express-rate-limit';
 import { collectionTables } from './db.mjs';
-import { HttpError, textValue, safeUrl, safeLink, upload, processImages, removeImages } from './security.mjs';
+import { HttpError, textValue, phoneValue, validPhone, safeUrl, safeLink, upload, processImages, removeImages } from './security.mjs';
 
 export const adminCollections = [
   ['slider','صور الواجهة'],['services','الخدمات'],['projects','المشاريع ومعرض الأعمال'],
@@ -73,6 +73,11 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       if(settings.siteUrl) {
         const site=safeUrl(settings.siteUrl);if(!site||site.startsWith('/'))throw new HttpError(422,'رابط الموقع يجب أن يبدأ بـ https://');settings.siteUrl=site.replace(/\/$/,'');
       }
+      for(const key of ['phone','whatsapp'])if(settings[key]) {
+        const value=phoneValue(settings[key]);if(!validPhone(value))throw new HttpError(422,'أدخل رقم تواصل صالحًا.');
+        settings[key]=key==='whatsapp'?value.replace(/\D/g,''):value;
+      }
+      if(settings.email&&!/^\S+@\S+\.\S+$/.test(settings.email))throw new HttpError(422,'أدخل بريدًا إلكترونيًا صالحًا.');
       if(!/^#[a-fA-F0-9]{6}$/.test(settings.accentColor||''))settings.accentColor='#B69B6A';
       if(Object.hasOwn(req.body,'stats')&&req.body.stats.trim()) {const parsed=JSON.parse(req.body.stats);if(!Array.isArray(parsed))throw new HttpError(422,'الإحصائيات يجب أن تكون قائمة JSON.');settings.stats=settings.statistics=parsed;}
       if(Object.hasOwn(req.body,'socialLinks')&&req.body.socialLinks.trim())settings.socialLinks=objectJSON(req.body.socialLinks,'روابط التواصل');
@@ -130,13 +135,15 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
       const title=textValue(req.body.title,200),slug=textValue(req.body.slug,180);
       if(title.length<2||!slug||!/^[-_a-zA-Z0-9\u0600-\u06ff]+$/.test(slug))throw new HttpError(422,'أدخل عنوانًا ورابطًا صالحًا دون مسافات.');
       const data={...old?.data,...objectJSON(req.body.dataJSON,'بيانات العنصر')};
+      if(data.content!==undefined&&typeof data.content!=='string')throw new HttpError(422,'محتوى الصفحة يجب أن يكون نصًا.');
+      for(const arrayKey of ['gallery','images'])if(data[arrayKey]!==undefined&&(!Array.isArray(data[arrayKey])||data[arrayKey].some(value=>typeof value!=='string'&&(!value||typeof value!=='object'||Array.isArray(value)))))throw new HttpError(422,'قائمة الصور غير صالحة.');
       const fields=['content','area','district','service','projectDate','buttonLabel','author','seoTitle','metaDescription','clientName','propertyType','alt','category','path','date'];
       for(const field of fields)if(typeof req.body[field]==='string')data[field]=textValue(req.body[field],field==='content'?100000:3000);
       for(const field of ['buttonUrl','beforeImageUrl','afterImageUrl'])if(typeof req.body[field]==='string')data[field]=field==='buttonUrl'?safeLink(req.body[field]):safeUrl(req.body[field]);
       if(req.body.beforeImageUrl!==undefined)data.before=data.beforeImage=data.beforeImageUrl;
       if(req.body.afterImageUrl!==undefined)data.after=data.afterImage=data.afterImageUrl;
       for(const field of ['tags','keywords'])if(typeof req.body[field]==='string')data[field]=req.body[field].split(/[,،\n]/).map(value=>textValue(value,100)).filter(Boolean).slice(0,30);
-      if(req.body.duration!==undefined)data.duration=Math.min(20000,Math.max(4000,Number(req.body.duration)||5000));
+      if(req.body.duration!==undefined)data.duration=Math.min(6000,Math.max(4000,Number(req.body.duration)||5000));
       if(req.body.rating!==undefined)data.rating=Math.min(5,Math.max(1,Number(req.body.rating)||5));
       if(req.body.galleryUrls!==undefined)data.gallery=req.body.galleryUrls.split(/\n/).map(line=>safeUrl(line)).filter(Boolean).slice(0,40);
       let image=safeUrl(req.body.imageUrl??req.body.image??old?.image);
