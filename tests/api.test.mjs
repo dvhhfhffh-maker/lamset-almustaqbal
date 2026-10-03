@@ -70,15 +70,19 @@ function multipart(fields, token) {
   return form;
 }
 
+function canonicalHref(html) {
+  const link = [...html.matchAll(/<link\b[^>]*>/gi)].find(match => /\brel=["']canonical["']/.test(match[0]));
+  return link?.[0].match(/\bhref=["']([^"']+)["']/)?.[1];
+}
+
 function oneH1(html, route) {
   assert.equal((html.match(/<h1(?:\s|>)/gi) || []).length, 1, 'Exactly one H1 is required at ' + route);
   assert.match(html, /<html\b[^>]*\blang=["']ar["']/i);
   assert.match(html, /<html\b[^>]*\bdir=["']rtl["']/i);
   assert.match(html, /<title>[^<]+<\/title>/i);
   assert.ok([...html.matchAll(/<meta\b[^>]*>/gi)].some(match => /\bname=["']description["']/.test(match[0]) && /\bcontent=["'][^"']{20,}/.test(match[0])));
-  const canonical = [...html.matchAll(/<link\b[^>]*>/gi)].find(match => /\brel=["']canonical["']/.test(match[0]));
-  assert.ok(canonical, 'Canonical URL is required at ' + route);
-  const href = canonical[0].match(/\bhref=["']([^"']+)["']/)?.[1];
+  const href = canonicalHref(html);
+  assert.ok(href, 'Canonical URL is required at ' + route);
   assert.ok(href && /^https?:\/\//.test(href), 'Canonical URL must be absolute');
 }
 
@@ -135,6 +139,23 @@ test('Arabic public routes and all service detail pages expose accessible SEO co
   const detail = await (await client.request('/services/interior-painting-riyadh')).text();
   assert.ok(schemas(detail).some(item => item['@type'] === 'Service'));
   assert.ok(schemas(detail).some(item => item['@type'] === 'BreadcrumbList'));
+  const previousSiteUrl = process.env.SITE_URL;
+  try {
+    process.env.SITE_URL = 'https://seo.example.test';
+    const environmentPage = await (await client.request('/services/interior-painting-riyadh')).text();
+    assert.equal(canonicalHref(environmentPage), 'https://seo.example.test/services/interior-painting-riyadh');
+    assert.ok(schemas(environmentPage).some(item => item['@id'] === 'https://seo.example.test/#business'));
+    const environmentSitemap = await (await client.request('/sitemap.xml')).text();
+    assert.match(environmentSitemap, /<loc>https:\/\/seo\.example\.test\/services\/interior-painting-riyadh<\/loc>/);
+    app.locals.db.saveSettings({ siteUrl: 'https://managed.example.test' });
+    const managedPage = await (await client.request('/services/interior-painting-riyadh')).text();
+    assert.equal(canonicalHref(managedPage), 'https://managed.example.test/services/interior-painting-riyadh');
+    assert.ok(schemas(managedPage).some(item => item['@id'] === 'https://managed.example.test/#business'));
+    assert.match(await (await client.request('/sitemap.xml')).text(), /<loc>https:\/\/managed\.example\.test\/services\/interior-painting-riyadh<\/loc>/);
+  } finally {
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
+  }
 });
 
 test('health, sitemap, robots and unknown URLs return the intended status', async () => {

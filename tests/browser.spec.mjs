@@ -272,6 +272,7 @@ test('administrator can upload, create, edit and delete a project through the da
     const sidebar = page.locator('#admin-sidebar');
     await expect(menuToggle).toHaveAttribute('aria-expanded', 'true');
     const controls = sidebar.locator('a,button,input:not([type="hidden"]),select,textarea');
+    await expect(controls.first()).toBeFocused();
     await controls.last().focus();
     await page.keyboard.press('Tab');
     await expect(controls.first()).toBeFocused();
