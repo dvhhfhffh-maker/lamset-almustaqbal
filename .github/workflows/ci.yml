@@ -119,7 +119,7 @@ jobs:
       - name: Install browser engines
         run: npx playwright install --with-deps chromium webkit
       - name: Check public desktop, phone and tablet interactions
-        run: npx playwright test --grep '^(public pages|hero supports|reduced motion)'
+        run: npx playwright test --grep '(public pages|hero supports|reduced motion)'
       - name: Upload public browser reports and screenshots
         if: always()
         uses: actions/upload-artifact@v4
