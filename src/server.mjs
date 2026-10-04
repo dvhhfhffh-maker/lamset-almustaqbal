@@ -85,10 +85,10 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
   app.use((req,res,next)=>{res.locals.cspNonce=randomBytes(18).toString('base64');next();});
   app.use(helmet({
     contentSecurityPolicy:{directives:{
-      defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>"'nonce-"+res.locals.cspNonce+"'"],
+      defaultSrc:["'self'"],scriptSrc:["'self'",'https://unpkg.com',(req,res)=>"'nonce-"+res.locals.cspNonce+"'"],
       styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],
       fontSrc:["'self'",'https://fonts.gstatic.com','data:'],imgSrc:["'self'",'https:','data:','blob:'],
-      connectSrc:["'self'"],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],
+      connectSrc:["'self'",'https://0.peerjs.com','wss://0.peerjs.com'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],
       frameSrc:["'self'",'https://www.google.com'],upgradeInsecureRequests:process.env.NODE_ENV==='production'?[]:null
     }},
     referrerPolicy:{policy:'strict-origin-when-cross-origin'}
