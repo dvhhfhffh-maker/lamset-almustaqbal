@@ -14,6 +14,16 @@ import { HttpError, createSessionManager, bootstrapAdmin, textValue, phoneValue,
 const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const whatsappMessage='السلام عليكم، شاهدت موقع لمسة المستقبل وأرغب في معرفة التفاصيل والحصول على عرض سعر.';
 const pageLabels={home:'الرئيسية',services:'خدماتنا',projects:'أعمالنا ومشاريعنا','before-after':'قبل وبعد',about:'من نحن',testimonials:'آراء العملاء',blog:'المدونة',quote:'طلب عرض سعر',contact:'تواصل معنا',notfound:'الصفحة غير موجودة'};
+const defaultPageDescriptions={
+  "services": "استكشف خدمات الدهانات الداخلية والخارجية والجبس بورد والديكور وترميم وتجديد المنازل في الرياض وشمال الرياض، واختر الخدمة المناسبة لمساحتك.",
+  "projects": "تصفح معرض صور الدهانات والجبس بورد والديكورات والتجديد. استكشف تفاصيل المساحات والخامات والأفكار، وتواصل لمناقشة مشروع منزلك في الرياض.",
+  "before-after": "تعرف على قسم مقارنة أعمال الدهانات والترميم قبل وبعد. تعرض لمسة المستقبل المقارنات الموثّقة بعد إضافتها من أعمالها في الرياض.",
+  "about": "تعرف على لمسة المستقبل وخدمات الدهانات والديكورات والجبس بورد والترميم في الرياض، وكيف نعتني بالتفاصيل من المعاينة حتى تسليم العمل.",
+  "testimonials": "شارك رأيك وتقييمك لخدمات لمسة المستقبل في الرياض، واقرأ آراء العملاء المنشورة بعد المراجعة. يمكن تحديد الخدمة والحي عند كتابة تعليقك.",
+  "blog": "نصائح عملية لاختيار الدهانات والألوان والجبس بورد، وأفكار ديكور المجالس وتجديد المنازل في الرياض تساعدك على التخطيط قبل بدء العمل.",
+  "quote": "اطلب عرض سعر لأعمال الدهانات والجبس بورد والديكور والترميم في الرياض. وضّح نوع العقار والخدمة والحي وأرفق صور المساحة لمناقشة احتياجك.",
+  "contact": "تواصل مع لمسة المستقبل عبر الهاتف أو واتساب للاستفسار عن الدهانات والديكور وترميم المنازل في الرياض وشمال الرياض، أو أرسل رسالة من الموقع."
+};
 const xml=value=>String(value).replace(/[<>&"']/g,char=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[char]));
 const baseURL=(req,settings)=>{
   const configured=safeUrl(settings.siteUrl||process.env.SITE_URL);
@@ -109,7 +119,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     const label=item?.title||pageLabels[view]||name;
     const seo=db.list('seo').find(record=>record.data?.path===req.path||record.slug===req.path.slice(1));
     const pageTitle=title||seo?.data?.seoTitle||seo?.title||item?.data?.seoTitle||(view==='home'?settings.metaTitle||name+' | دهانات وديكورات وترميم في الرياض':label+' | '+name);
-    const pageDescription=description||seo?.data?.metaDescription||seo?.description||item?.data?.metaDescription||item?.description||settings.metaDescription||settings.description||'دهانات وديكورات وجبس بورد وترميم وتجديد منازل في الرياض وشمال الرياض.';
+    const pageDescription=description||seo?.data?.metaDescription||seo?.description||item?.data?.metaDescription||item?.description||defaultPageDescriptions[view]||settings.metaDescription||settings.description||'دهانات وديكورات وجبس بورد وترميم وتجديد منازل في الرياض وشمال الرياض.';
     const canonical=base+(req.path==='/'?'':req.path.replace(/\/$/,''));
     const pageImage=absolute(safeUrl(seo?.data?.ogImage||seo?.image||item?.data?.ogImage||item?.image||settings.ogImage),base);
     const keywordValue=seo?.data?.keywords||item?.data?.keywords||settings.keywords||[];
