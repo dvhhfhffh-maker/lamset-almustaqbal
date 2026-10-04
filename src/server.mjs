@@ -10,7 +10,6 @@ import { mkdir } from 'node:fs/promises';
 import { createDatabase } from './db.mjs';
 import { attachGameWebSocketServer } from './game-ws.mjs';
 import { createAdminRouter } from './admin.mjs';
-import { attachGameServer } from './game-server.mjs';
 import { HttpError, createSessionManager, bootstrapAdmin, textValue, phoneValue, validPhone, safeUrl, upload, processImages, removeImages } from './security.mjs';
 
 const root=dirname(dirname(fileURLToPath(import.meta.url)));
@@ -248,7 +247,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   const port=Number(process.env.PORT)||3000;
   const server=app.listen(port,()=>console.log('لمسة المستقبل: http://localhost:'+port));
   attachGameWebSocketServer(server);
-  attachGameServer(server);
   const shutdown=()=>server.close(()=>{app.locals.db.close();process.exit(0);});
   process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
 }
