@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080a12">
+<title>تحدّي الأصحاب 🔥</title>
+<style>
+:root{--bg:#080a12;--card:#111522e8;--line:#ffffff1c;--txt:#f7f7fb;--muted:#a7acc0;--p:#7c5cff;--b:#25a7ff;--ok:#31d69b;--orange:#ff9b42}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial;background:radial-gradient(circle at 90% 0,#321b66 0,transparent 30%),radial-gradient(circle at 0 35%,#073358 0,transparent 28%),var(--bg);color:var(--txt);min-height:100vh}button,input,select,textarea{font:inherit}.wrap{width:min(980px,100%);margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;gap:8px}.badge{padding:8px 12px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}.hero{text-align:center;padding:36px 10px}.logo{font-size:72px}.hero h1{font-size:clamp(36px,8vw,64px);margin:8px;background:linear-gradient(90deg,#fff,#b5a4ff,#72c7ff);-webkit-background-clip:text;color:transparent}.hero p,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:0 20px 70px #0005;backdrop-filter:blur(14px)}.field{width:100%;padding:14px;border-radius:15px;border:1px solid var(--line);background:#0b0f19;color:#fff;outline:none;margin:6px 0 12px}.btn{border:0;border-radius:15px;padding:14px 18px;color:#fff;font-weight:900;background:linear-gradient(135deg,var(--p),var(--b));cursor:pointer}.btn2{background:#151a28;border:1px solid var(--line)}.btn:disabled{opacity:.4}.players{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0}.player{padding:13px;border:1px solid var(--line);border-radius:16px;background:#0c101a}.ready{color:var(--ok)}.code{font-size:36px;letter-spacing:7px;font-weight:900;color:#c6b9ff}.scorebar{display:flex;gap:8px;overflow:auto;margin-bottom:12px}.score{min-width:130px;background:#101522;padding:11px;border-radius:14px;border:1px solid var(--line)}.score.current{border-color:var(--orange);box-shadow:0 0 18px #ff9b4230}.game{display:grid;grid-template-columns:1.5fr .7fr;gap:14px}.prompt{text-align:center}.big{font-size:clamp(27px,5vw,46px);font-weight:900;margin:18px 0}.timer{font-size:27px;font-weight:900;color:#ffb14a}.options{display:grid;grid-template-columns:1fr 1fr;gap:10px}.chatlog{height:180px;overflow:auto;background:#090d16;border-radius:14px;padding:10px}.msg{padding:5px}.msg b{color:#a994ff}.chatrow{display:flex;gap:7px;margin-top:8px}.chatrow input{flex:1}.reacts{display:flex;gap:8px;flex-wrap:wrap}.react{font-size:23px;padding:7px 10px;border-radius:13px;background:#0c101a;border:1px solid var(--line);cursor:pointer}.hidden{display:none!important}.overlay{position:fixed;inset:0;background:#05070dcc;display:none;place-items:center;padding:20px;z-index:20}.overlay.show{display:grid}.pop{text-align:center;width:min(520px,100%)}.float{position:fixed;bottom:12%;font-size:70px;animation:fly 1.5s ease-out forwards;z-index:40;pointer-events:none}@keyframes fly{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-420px) rotate(20deg) scale(1.4);opacity:0}}.rank{padding:12px;border-bottom:1px solid var(--line)}
+@media(max-width:760px){.grid,.game,.players,.options{grid-template-columns:1fr}.wrap{padding:11px}.hero{padding:22px 8px}.chatlog{height:130px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><b>🔥 تحدّي الأصحاب</b><span id="conn" class="badge">جاهز</span></div>
+  <section id="home">
+    <div class="hero"><div class="logo">🎮</div><h1>تحدّي الأصحاب</h1><p>نسخة Web مباشرة — أنشئ غرفة وشارك الكود مع أصدقائك.</p></div>
+    <div class="grid">
+      <div class="card"><h2>👑 إنشاء غرفة</h2>
+        <input id="cn" aria-label="اسم المضيف" class="field" maxlength="20" placeholder="اسمك">
+        <input id="rn" aria-label="اسم الغرفة" class="field" maxlength="24" placeholder="اسم الغرفة">
+        <select id="mode" class="field"><option value="mixed">🔥 التحدي الكبير</option><option value="question">🧠 جاوب أو تعاقب</option><option value="end">🔤 نهاية الحرف</option><option value="chain">⛓️ آخر حرف</option><option value="story">✍️ قصة بلا حرف</option></select>
+        <select id="target" class="field"><option value="5">الفوز عند 5 نقاط</option><option value="10">الفوز عند 10 نقاط</option></select>
+        <button id="createBtn" class="btn">إنشاء الغرفة 🚀</button>
+      </div>
+      <div class="card"><h2>🎯 دخول غرفة</h2>
+        <input id="jn" aria-label="اسم اللاعب المنضم" class="field" maxlength="20" placeholder="اسمك">
+        <input id="jc" aria-label="كود الغرفة" class="field" maxlength="5" placeholder="كود الغرفة">
+        <button id="joinBtn" class="btn">انضمام 🔥</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="lobby" class="hidden">
+    <div class="card">
+      <h2 id="lt"></h2><div id="code" class="code"></div>
+      <div id="players" class="players"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="ready" class="btn btn2">أنا جاهز ✅</button><button id="start" class="btn hidden">ابدأ اللعبة 🔥</button><button id="share" class="btn btn2">📤 مشاركة</button></div>
+      <p id="ls" class="muted"></p>
+    </div>
+    <div class="card" style="margin-top:12px"><h3>💬 الدردشة</h3><div id="chat1" class="chatlog"></div><div class="chatrow"><input id="ci1" class="field" maxlength="120" placeholder="رسالة..."><button id="send1" class="btn btn2">إرسال</button></div></div>
+  </section>
+
+  <section id="game" class="hidden">
+    <div id="scores" class="scorebar"></div>
+    <div style="display:flex;justify-content:space-between"><div id="round"></div><div id="timer" class="timer">00:20</div></div>
+    <div class="game">
+      <div class="card prompt"><div id="turn" class="muted"></div><div id="kind" style="color:#9fb0ff;font-weight:900"></div><div id="pt" class="big"></div><div id="opts" class="options"></div><div id="textbox" class="hidden"><textarea id="ans" class="field" rows="5" placeholder="اكتب إجابتك..."></textarea><button id="submit" class="btn">إرسال</button></div><p id="wait" class="muted"></p></div>
+      <div>
+        <div class="card"><h3>😂 التفاعلات</h3><div id="reacts" class="reacts"><button class="react">😂</button><button class="react">🔥</button><button class="react">😈</button><button class="react">👏</button><button class="react">🤦</button><button class="react">💀</button></div></div>
+        <div class="card" style="margin-top:12px"><h3>💬 الدردشة</h3><div id="chat2" class="chatlog"></div><div class="chatrow"><input id="ci2" class="field" maxlength="120" placeholder="رسالة..."><button id="send2" class="btn btn2">➤</button></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" class="hidden"><div class="card" style="text-align:center"><div style="font-size:82px">🏆</div><h1>النتيجة النهائية</h1><div id="winner" class="big"></div><div id="rank"></div><br><button id="again" class="btn">🔁 لعبة جديدة</button></div></section>
+</div>
+<div id="ov" class="overlay"><div class="card pop"><div id="ove" style="font-size:70px">😈</div><h2 id="ovt"></h2><h3 id="ovx" style="color:#ffb14a"></h3><p class="muted">اضغط لإغلاق</p></div></div>
+<script src="/party-v2.js"></script>
+</body></html>
