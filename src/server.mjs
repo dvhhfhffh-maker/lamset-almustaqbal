@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdir } from 'node:fs/promises';
 import { createDatabase } from './db.mjs';
 import { attachGameWebSocketServer } from './game-ws.mjs';
+import { attachGameHttpRoutes } from './game-http.mjs';
 import { createAdminRouter } from './admin.mjs';
 import { HttpError, createSessionManager, bootstrapAdmin, textValue, phoneValue, validPhone, safeUrl, upload, processImages, removeImages } from './security.mjs';
 
@@ -102,8 +103,10 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     res.type('css').set('Cache-Control','no-cache').send(':root{--accent:'+accent+';--gold:'+accent+';--brand:'+accent+'}');
   });
   app.use('/uploads/media',express.static(resolve(uploadsDir,'media'),{maxAge:'30d',immutable:true,dotfiles:'deny',index:false}));
-  app.get('/game.html',(req,res)=>res.set('Cache-Control','no-store').redirect(302,'/party-v2.html'));
-  app.get('/party-v2.html',(req,res)=>res.set('Cache-Control','no-store').sendFile(resolve(root,'public/party-v2.html')));
+  attachGameHttpRoutes(app);
+  app.get('/play',(req,res)=>res.set('Cache-Control','no-store, no-cache, must-revalidate').render('play',{cspNonce:res.locals.cspNonce}));
+  app.get('/game.html',(req,res)=>res.set('Cache-Control','no-store').redirect(302,'/play'));
+  app.get('/party-v2.html',(req,res)=>res.set('Cache-Control','no-store').redirect(302,'/play'));
   app.get('/party-v2.js',(req,res)=>res.set('Cache-Control','no-store').type('js').sendFile(resolve(root,'public/party-v2.js')));
   app.use(express.static(resolve(root,'public'),{maxAge:'1h',dotfiles:'deny',index:false}));
   app.use(express.urlencoded({extended:false,limit:'200kb',parameterLimit:100}));
