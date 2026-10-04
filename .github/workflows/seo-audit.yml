@@ -183,7 +183,10 @@ jobs:
             const groups=new Map(); for(const page of pages){const value=page[field];if(!value)continue;const group=groups.get(value)||[];group.push(page.path);groups.set(value,group);}
             for(const group of groups.values())if(group.length>1)add('warning',group.join(' '),'Duplicate '+field+' across '+group.length+' pages');
           }
-          const output={origin:ORIGIN,sitemaps:seenSitemaps.size,sitemapPages:sitemapURLs.size,pagesChecked:pages.length,internalLinksDiscovered:links.size,internalLinksChecked:checkedLinks,formLinkPathsSkipped:skippedFormLinks,errors:findings.filter(f=>f.level==='error').length,warnings:findings.filter(f=>f.level==='warning').length,indexing:'Crawlability audited only. Actual Google indexing and rankings require Search Console data.'};
+          const topLevelPaths=new Set(['/','/services','/projects','/before-after','/about','/testimonials','/blog','/quote','/contact']);
+          const topLevelPages=pages.filter(p=>topLevelPaths.has(p.path));
+          if(topLevelPages.length!==9)add('error','/','Expected all 9 top-level public pages');
+          const output={origin:ORIGIN,sitemaps:seenSitemaps.size,sitemapPages:sitemapURLs.size,pagesChecked:pages.length,topLevelPagesChecked:topLevelPages.length,topLevelUniqueDescriptions:new Set(topLevelPages.map(p=>p.description)).size,uniqueTitles:new Set(pages.map(p=>p.title)).size,uniqueDescriptions:new Set(pages.map(p=>p.description)).size,imageSourcesChecked:pages.reduce((n,p)=>n+p.images,0),imagesMissingAlt:pages.reduce((n,p)=>n+p.missingAlt,0),imagesEmptyAlt:pages.reduce((n,p)=>n+p.emptyAlt,0),inactiveImagePlaceholders:pages.reduce((n,p)=>n+p.inactiveImagePlaceholders,0),internalLinksDiscovered:links.size,internalLinksChecked:checkedLinks,formLinkPathsSkipped:skippedFormLinks,errors:findings.filter(f=>f.level==='error').length,warnings:findings.filter(f=>f.level==='warning').length,indexing:'Crawlability audited only. Actual Google indexing and rankings require Search Console data.'};
           console.log('SEO_AUDIT_SUMMARY='+JSON.stringify(output));
           for(const {title,description,...page} of pages.sort((a,b)=>a.path.localeCompare(b.path)))console.log('SEO_PAGE='+JSON.stringify(page));
           for(const finding of findings)console.log('SEO_FINDING='+JSON.stringify(finding));
