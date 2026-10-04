@@ -12,6 +12,7 @@
 <% if(pageImage) { %><meta name="twitter:image" content="<%= pageImage %>"><% } %>
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="<%= title %>"><meta name="twitter:description" content="<%= description %>">
 <% if(keywords) { %><meta name="keywords" content="<%= Array.isArray(keywords)?keywords.join(', '):keywords %>"><% } %>
+<% if(typeof settings.googleSiteVerification==='string' && settings.googleSiteVerification.length>0 && settings.googleSiteVerification.length<=256 && !/[^A-Za-z0-9_-]/.test(settings.googleSiteVerification)) { %><meta name="google-site-verification" content="<%= settings.googleSiteVerification %>"><% } %>
 <meta name="csrf-token" content="<%= csrfToken %>">
 <link rel="icon" href="<%= settings.favicon || '/favicon.svg' %>">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

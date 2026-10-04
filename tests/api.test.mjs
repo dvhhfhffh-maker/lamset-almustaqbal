@@ -507,6 +507,103 @@ test('managed categories, project flags, customer names and offers appear on the
   assert.equal(app.locals.db.get('offers', 'managed-unsafe-link', { all: true }).data.buttonUrl, '', 'Advanced JSON URLs must use the same safety checks as visible form fields');
 });
 
+test('Google verification settings require admin access, render public metadata and can be cleared', async () => {
+  const client = new Client();
+  const publicToken = await client.token('/');
+  const missingMeta = html => assert.doesNotMatch(html, /<meta\b[^>]*\bname="google-site-verification"/);
+  missingMeta(await (await client.request('/')).text());
+  const anonymous = await client.post('/admin/settings', { googleSiteVerification: 'Test_Public_Anonymous' }, publicToken);
+  assert.ok([302, 303].includes(anonymous.status));
+  assert.equal(anonymous.headers.get('location'), '/admin/login');
+  assert.equal(app.locals.db.getSettings().googleSiteVerification, undefined);
+
+  const admin = new Client();
+  const csrf = await admin.login();
+  const settingsHtml = await (await admin.request('/admin/settings')).text();
+  assert.match(settingsHtml, /إثبات ملكية الموقع في Google/);
+  assert.match(settingsHtml, /<input\b[^>]*name="googleSiteVerification"[^>]*maxlength="256"/);
+  assert.match(settingsHtml, /https:\/\/search\.google\.com\/search-console\/welcome\?hl=ar/);
+  assert.match(settingsHtml, /https:\/\/lamset-almustaqbal-production\.up\.railway\.app/);
+  assert.match(settingsHtml, /href="\/sitemap\.xml"/);
+  const forged = await admin.post('/admin/settings', { googleSiteVerification: 'Test_Public_Forged' }, 'invalid-csrf');
+  assert.equal(forged.status, 403);
+  assert.equal(app.locals.db.getSettings().googleSiteVerification, undefined);
+
+  const tokens = ['x', 'Test_Public_GSC-123', 'Test_Public_' + 'A'.repeat(244)];
+  assert.equal(tokens[2].length, 256);
+  for (const token of tokens) {
+    const response = await admin.request('/admin/settings', {
+      method: 'POST', body: multipart({ googleSiteVerification: '  ' + token + '  ' }, csrf),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/settings?saved=1');
+    assert.equal(app.locals.db.getSettings().googleSiteVerification, token, 'Verification tokens must be stored without surrounding spaces');
+    for (const route of ['/', '/services/interior-painting-riyadh', '/projects']) {
+      const html = await (await client.request(route)).text();
+      const metas = html.match(/<meta\b[^>]*\bname="google-site-verification"[^>]*>/g) || [];
+      assert.deepEqual(metas, ['<meta name="google-site-verification" content="' + token + '">'], 'Each public head must expose exactly the saved token: ' + route);
+    }
+  }
+  missingMeta(await (await admin.request('/admin/settings')).text());
+  assert.equal((await admin.post('/admin/settings', {}, csrf)).status, 303);
+  assert.equal(app.locals.db.getSettings().googleSiteVerification, tokens[2], 'Omitting the field must preserve the configured token');
+  const advanced = await admin.post('/admin/settings', {
+    settingsJSON: JSON.stringify({ googleSiteVerification: '  Test_Advanced_Public-456  ' }),
+  }, csrf);
+  assert.equal(advanced.status, 303);
+  assert.equal(app.locals.db.getSettings().googleSiteVerification, 'Test_Advanced_Public-456');
+  const cleared = await admin.post('/admin/settings', { googleSiteVerification: '   ' }, csrf);
+  assert.equal(cleared.status, 303);
+  assert.equal(app.locals.db.getSettings().googleSiteVerification, '');
+  for (const route of ['/', '/services/interior-painting-riyadh']) missingMeta(await (await client.request(route)).text());
+});
+
+test('Google verification rejects invalid fields and JSON without saving or reflecting them', async () => {
+  const admin = new Client();
+  const csrf = await admin.login();
+  const baseline = 'Test_Public_Baseline-123';
+  assert.equal((await admin.post('/admin/settings', { googleSiteVerification: baseline }, csrf)).status, 303);
+  const previous = app.locals.db.getSettings();
+  const invalidTag = '<meta name="google-site-verification" content="InjectedPublicToken">';
+  const invalid = [
+    invalidTag, 'invalid token', 'Test\nToken', 'Test\0Token', 'Test_Public\n',
+    'A'.repeat(257), 'Token+value', 'Token=value', 'رمز',
+  ];
+  for (const value of invalid) {
+    const rejected = await admin.post('/admin/settings', { googleSiteVerification: value, businessName: 'لن يتم حفظه' }, csrf);
+    assert.equal(rejected.status, 422, 'Invalid verification input must be rejected without truncation');
+    const errorHtml = await rejected.text();
+    assert.match(errorHtml, /ألصق قيمة إثبات ملكية Google فقط/);
+    assert.ok(!errorHtml.includes(value), 'The invalid token must not be reflected in the validation response');
+    assert.deepEqual(app.locals.db.getSettings(), previous, 'An invalid token must prevent every setting from being written');
+  }
+  for (const value of [null, 42, true, ['Test_Public_Array'], { token: 'Test_Public_Object' }]) {
+    const rejected = await admin.request('/admin/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ googleSiteVerification: value, _csrf: csrf }),
+    });
+    assert.equal(rejected.status, 422, 'Verification fields must reject non-string values rather than silently ignore them');
+    assert.deepEqual(app.locals.db.getSettings(), previous);
+  }
+  for (const value of [invalidTag, 'A'.repeat(257), 'Test_Public\n', null, { token: 'Test_Public_Object' }]) {
+    const rejected = await admin.post('/admin/settings', {
+      settingsJSON: JSON.stringify({ googleSiteVerification: value }),
+    }, csrf);
+    assert.equal(rejected.status, 422, 'Advanced settings JSON must use the same validation');
+    assert.deepEqual(app.locals.db.getSettings(), previous);
+  }
+  const client = new Client();
+  const home = await (await client.request('/')).text();
+  assert.ok(home.includes('<meta name="google-site-verification" content="' + baseline + '">'));
+  assert.doesNotMatch(home, /InjectedPublicToken/);
+  for (const value of [invalidTag, 'Test_Public\n', 'A'.repeat(257), 42]) {
+    app.locals.db.saveSettings({ googleSiteVerification: value });
+    const html = await (await client.request('/')).text();
+    assert.doesNotMatch(html, /<meta\b[^>]*\bname="google-site-verification"/, 'Malformed preexisting settings must never produce a verification tag');
+    assert.doesNotMatch(html, /InjectedPublicToken/);
+  }
+});
+
 function customerReviews() {
   return app.locals.db.list('testimonials', { all: true }).filter(record => record.data.source === 'customer');
 }

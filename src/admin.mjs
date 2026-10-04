@@ -17,6 +17,12 @@ function objectJSON(value,label) {
   try {const parsed=JSON.parse(value);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error();return parsed;}
   catch {throw new HttpError(422,label+' يجب أن يكون كائن JSON صالحًا.');}
 }
+function googleVerificationValue(value) {
+  const token=typeof value==='string'?value.trim():'';
+  if(typeof value!=='string'||/[\u0000-\u001f\u007f]/.test(value)||token.length>256||/[^A-Za-z0-9_-]/.test(token))
+    throw new HttpError(422,'ألصق قيمة إثبات ملكية Google فقط: حتى 256 حرفًا من الحروف الإنجليزية والأرقام والشرطة والشرطة السفلية، أو اترك الحقل فارغًا.');
+  return token;
+}
 const cleanSettings = object => Object.fromEntries(Object.entries(object).filter(([key])=>!key.startsWith('__')&&!['constructor','prototype'].includes(key)));
 const defaults={id:'',slug:'',title:'',description:'',image:'',enabled:true,position:0,data:{}};
 
@@ -87,8 +93,12 @@ export async function createAdminRouter({db,sessions,uploadsDir}) {
     try {
       const oldSettings=db.getSettings();
       const settings={...oldSettings,...cleanSettings(objectJSON(req.body.settingsJSON,'الإعدادات'))};
-      const strings=['businessName','name','siteName','siteUrl','phone','whatsapp','email','description','heroTitle','heroSubtitle','heroDescription','logo','favicon','metaTitle','metaDescription','ogImage','accentColor','address','mapUrl','mapsUrl','officialStreetAddress'];
-      for(const key of strings)if(typeof req.body[key]==='string')settings[key]=textValue(req.body[key],['description','metaDescription','heroDescription'].includes(key)?2500:1000);
+      const strings=['businessName','name','siteName','siteUrl','phone','whatsapp','email','description','heroTitle','heroSubtitle','heroDescription','logo','favicon','metaTitle','metaDescription','ogImage','accentColor','address','mapUrl','mapsUrl','officialStreetAddress','googleSiteVerification'];
+      for(const key of strings) {
+        if(key==='googleSiteVerification') {if(Object.hasOwn(req.body,key))settings[key]=req.body[key];}
+        else if(typeof req.body[key]==='string')settings[key]=textValue(req.body[key],['description','metaDescription','heroDescription'].includes(key)?2500:1000);
+      }
+      if(Object.hasOwn(settings,'googleSiteVerification'))settings.googleSiteVerification=googleVerificationValue(settings.googleSiteVerification);
       for(const key of ['logo','favicon','ogImage','mapsUrl','mapUrl'])settings[key]=safeUrl(settings[key]);
       if(typeof req.body.businessName==='string')settings.siteName=settings.businessName;
       else if(typeof req.body.siteName==='string')settings.businessName=settings.siteName;
