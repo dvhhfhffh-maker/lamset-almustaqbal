@@ -36,12 +36,13 @@ jobs:
           assert(ready,'Production /healthz must return HTTP 200 with status ok');
           console.log('READY: production healthcheck HTTP 200');
           NODE
-      - name: Verify production pages with GET requests only
+      - name: Verify public pages and reject malformed review bodies
         run: |
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           const base=process.env.PLAYWRIGHT_BASE_URL.replace(/\/$/,'');
           let requests=0;
+          let reviewSession;
           async function get(path){
             const response=await fetch(base+path,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(20000)});
             requests++;
@@ -50,6 +51,22 @@ jobs:
           function attribute(tag,name){return tag.match(new RegExp('\\b'+name+'=["\\x27]([^"\\x27]*)["\\x27]','i'))?.[1];}
           function canonical(html){const tag=[...html.matchAll(/<link\b[^>]*>/gi)].map(x=>x[0]).find(x=>attribute(x,'rel')==='canonical');return tag?attribute(tag,'href'):undefined;}
           function schemas(html){return [...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].flatMap(x=>{const value=JSON.parse(x[1]);return value['@graph']||(Array.isArray(value)?value:[value]);});}
+          function hasAttribute(tag,name){return new RegExp('\\s'+name+'(?:\\s|=|/?>)','i').test(tag);}
+          function reviewForm(html){
+            const form=[...html.matchAll(/<form\b[^>]*>[\s\S]*?<\/form>/gi)].map(x=>x[0]).find(x=>attribute(x.match(/^<form\b[^>]*>/i)?.[0]||'','id')==='customer-review-form');
+            assert(form,'Customer review form must be present');
+            const formTag=form.match(/^<form\b[^>]*>/i)[0];
+            assert(attribute(formTag,'action')==='/testimonials','Review form submits to the native testimonials route');
+            assert(attribute(formTag,'method')?.toLowerCase()==='post','Review form uses native POST');
+            const controls=[...form.matchAll(/<(?:input|select|textarea|button)\b[^>]*>/gi)].map(x=>x[0]);
+            const fields=new Map(controls.map(tag=>[attribute(tag,'name'),tag]));
+            for(const name of ['_csrf','name','rating','service','district','comment','consent'])assert(fields.has(name),'Review form field: '+name);
+            assert(attribute(fields.get('_csrf'),'type')==='hidden','Review CSRF token must be hidden');
+            assert(/<textarea\b/i.test(fields.get('comment'))&&hasAttribute(fields.get('comment'),'required')&&attribute(fields.get('comment'),'minlength')==='3'&&attribute(fields.get('comment'),'maxlength')==='2000','Review comment enforces 3 to 2000 characters');
+            assert(attribute(fields.get('consent'),'type')==='checkbox'&&hasAttribute(fields.get('consent'),'required'),'Publishing consent is a required checkbox');
+            assert(controls.some(tag=>/^<button\b/i.test(tag)&&attribute(tag,'type')==='submit'),'Native review submit button must be present');
+            return fields;
+          }
           const pages=['/','/services','/services/interior-painting-riyadh','/projects','/before-after','/about','/testimonials','/blog','/quote','/contact','/riyadh/al-narjis'];
           const assets=new Set();
           for(const path of pages){
@@ -67,7 +84,17 @@ jobs:
             assert(/https:\/\/wa\.me\/966501308295\?text=/.test(html),'WhatsApp contact link: '+path);
             const csp=response.headers.get('content-security-policy')||'';
             assert(csp.includes('script-src')&&!/script-src[^;]*'unsafe-inline'/.test(csp),'Protected script policy: '+path);
+            if(path==='/testimonials'){
+              const fields=reviewForm(html);
+              const csrf=attribute(fields.get('_csrf'),'value');
+              assert(/^[a-f0-9]{64}$/.test(csrf||''),'Review CSRF token must be valid');
+              const sessionCookie=response.headers.getSetCookie().find(x=>/^lm\.sid=/.test(x));
+              assert(sessionCookie&&/;\s*HttpOnly/i.test(sessionCookie)&&/;\s*Secure/i.test(sessionCookie)&&/;\s*SameSite=Lax/i.test(sessionCookie),'Review session requires a secure production cookie');
+              reviewSession={csrf,cookie:sessionCookie.split(';',1)[0]};
+              console.log('REVIEW_FORM_PASSED: native POST, seven fields, comment limits and mandatory publishing consent');
+            }
             if(path==='/'){
+              assert([...html.matchAll(/<a\b[^>]*>/gi)].some(x=>attribute(x[0],'href')==='/testimonials#write-review'),'Homepage provides the write-review CTA');
               for(const match of html.matchAll(/<(?:script|link)\b[^>]*>/gi)){
                 const tag=match[0];
                 const src=attribute(tag,'src')||(attribute(tag,'rel')==='stylesheet'?attribute(tag,'href'):undefined);
@@ -112,21 +139,22 @@ jobs:
           assert(/noindex/.test(loginHtml),'Administrator login must be excluded from indexing');
           const cookies=login.headers.getSetCookie();
           assert(cookies.some(x=>/^lm\.sid=/.test(x)&&/;\s*HttpOnly/i.test(x)&&/;\s*Secure/i.test(x)&&/;\s*SameSite=Lax/i.test(x)),'Production authentication cookies require Secure, HttpOnly and SameSite');
-          console.log('GET_ONLY_SMOKE_PASSED: '+requests+' requests; '+pages.length+' public pages; SEO, assets, 404 and admin protection verified; no POST or setup route visited.');
+          console.log('GET_SMOKE_PASSED: '+requests+' requests; '+pages.length+' public pages; review form and homepage CTA, SEO, assets, 404 and admin protection verified.');
+          assert(reviewSession,'A public review session must be captured before malformed requests');
+          let malformedRequests=0;
+          for(const testCase of [{name:'empty body'},{name:'text/plain body',body:'not-a-review',contentType:'text/plain'}]){
+            const headers={'X-CSRF-Token':reviewSession.csrf,'Origin':base,'Cookie':reviewSession.cookie};
+            if(testCase.contentType)headers['Content-Type']=testCase.contentType;
+            const response=await fetch(base+'/testimonials',{method:'POST',headers,body:testCase.body,redirect:'manual',signal:AbortSignal.timeout(20000)});
+            malformedRequests++;
+            assert(response.status===422,'Malformed review request must return HTTP 422: '+testCase.name);
+            assert((response.headers.get('content-type')||'').includes('text/html'),'Malformed review response must be regular HTML: '+testCase.name);
+            const html=await response.text();
+            reviewForm(html);
+            assert([...html.matchAll(/<div\b[^>]*>/gi)].some(x=>(attribute(x[0],'class')||'').split(/\s+/).includes('form-errors')&&attribute(x[0],'role')==='alert'),'Malformed review returns accessible form errors: '+testCase.name);
+            for(const message of ['اكتب اسمًا من حرفين إلى 80 حرفًا.','اكتب رأيًا من 3 إلى 2000 حرف.','اختر تقييمًا صحيحًا من نجمة إلى خمس نجوم.','يلزم تأكيد موافقتك على نشر الاسم والرأي بعد المراجعة.'])assert(html.includes(message),'Malformed review must fail required-field validation: '+testCase.name);
+            assert(!/class=["'][^"']*\bform-success\b/.test(html),'Malformed review must not show a success message: '+testCase.name);
+            console.log('MALFORMED_REVIEW 422 '+testCase.name);
+          }
+          console.log('PRODUCTION_SMOKE_PASSED: '+requests+' GET requests; '+malformedRequests+' malformed review POST requests rejected; '+pages.length+' public pages; no valid review submitted, no administration POST, and no setup route visited.');
           NODE
-      - name: Install locked test dependencies
-        run: npm ci --no-audit --no-fund
-      - name: Install browser engines
-        run: npx playwright install --with-deps chromium webkit
-      - name: Check public desktop, phone and tablet interactions
-        run: npx playwright test --grep '(public pages|hero supports|reduced motion)'
-      - name: Upload public browser reports and screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-public-browser-results
-          path: |
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
-          retention-days: 7
