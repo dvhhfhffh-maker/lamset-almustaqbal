@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import { createApp } from '../src/server.mjs';
 
 const account = { email: 'api-test@example.test', password: 'Temporary-Test!Password-64859' };
-let app, server, origin, workspace;
+let app, server, origin, workspace, previousVerificationEnvironment;
 
 class Client {
   cookies = new Map();
@@ -95,6 +95,8 @@ function schemas(html) {
 }
 
 beforeEach(async context => {
+  previousVerificationEnvironment = process.env.GOOGLE_SITE_VERIFICATION;
+  delete process.env.GOOGLE_SITE_VERIFICATION;
   workspace = await mkdtemp(join(tmpdir(), 'lamset-api-'));
   app = await createApp({ databasePath: join(workspace, 'site.db'), uploadsDir: join(workspace, 'uploads'), testing: true });
   if (!context.name.startsWith('first administrator')) app.locals.db.createUser(account.email, await bcrypt.hash(account.password, 4));
@@ -105,6 +107,8 @@ beforeEach(async context => {
 });
 
 afterEach(async () => {
+  if (previousVerificationEnvironment === undefined) delete process.env.GOOGLE_SITE_VERIFICATION;
+  else process.env.GOOGLE_SITE_VERIFICATION = previousVerificationEnvironment;
   if (server) {
     server.closeIdleConnections?.();
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -601,6 +605,76 @@ test('Google verification rejects invalid fields and JSON without saving or refl
     const html = await (await client.request('/')).text();
     assert.doesNotMatch(html, /<meta\b[^>]*\bname="google-site-verification"/, 'Malformed preexisting settings must never produce a verification tag');
     assert.doesNotMatch(html, /InjectedPublicToken/);
+  }
+});
+
+test('Google verification environment fallback renders valid tokens without changing CMS settings', async () => {
+  const client = new Client();
+  const originalSettings = app.locals.db.getSettings();
+  assert.equal(Object.hasOwn(originalSettings, 'googleSiteVerification'), false);
+  const response = await client.request('/');
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(await response.text(), /<meta\b[^>]*\bname="google-site-verification"/);
+  for (const token of ['x', 'Test_Public_Environment-123', 'E'.repeat(256)]) {
+    process.env.GOOGLE_SITE_VERIFICATION = token;
+    for (const route of ['/', '/services/interior-painting-riyadh', '/projects']) {
+      const page = await client.request(route);
+      assert.equal(page.status, 200);
+      const html = await page.text();
+      const metas = html.match(/<meta\b[^>]*\bname="google-site-verification"[^>]*>/g) || [];
+      assert.deepEqual(metas, ['<meta name="google-site-verification" content="' + token + '">'], 'Missing CMS setting must use the valid environment token: ' + route);
+    }
+    assert.deepEqual(app.locals.db.getSettings(), originalSettings, 'Reading the environment fallback must never persist it as a CMS setting');
+  }
+  const invalid = [
+    '', '   ', 'invalid token', ' Test_Public_Padded ', 'Test\nPublic', 'Test_Public\n',
+    'Token+value', 'رمز', 'E'.repeat(257),
+    '<meta name="google-site-verification" content="InjectedEnvironmentToken">',
+  ];
+  for (const value of invalid) {
+    process.env.GOOGLE_SITE_VERIFICATION = value;
+    const page = await client.request('/');
+    assert.equal(page.status, 200, 'Invalid optional environment values must not break a public page');
+    const html = await page.text();
+    assert.doesNotMatch(html, /<meta\b[^>]*\bname="google-site-verification"/);
+    assert.doesNotMatch(html, /InjectedEnvironmentToken/);
+  }
+  delete process.env.GOOGLE_SITE_VERIFICATION;
+  assert.doesNotMatch(await (await client.request('/')).text(), /<meta\b[^>]*\bname="google-site-verification"/);
+  assert.deepEqual(app.locals.db.getSettings(), originalSettings);
+});
+
+test('Google verification CMS values override the environment including blank and invalid values', async () => {
+  const environmentToken = 'Test_Public_Environment-123';
+  process.env.GOOGLE_SITE_VERIFICATION = environmentToken;
+  const client = new Client();
+  assert.ok((await (await client.request('/')).text()).includes('<meta name="google-site-verification" content="' + environmentToken + '">'));
+  const admin = new Client();
+  const csrf = await admin.login();
+  const settingsHtml = await (await admin.request('/admin/settings')).text();
+  assert.match(settingsHtml, /<input\b[^>]*name="googleSiteVerification"[^>]*value=""/);
+  assert.ok(!settingsHtml.includes(environmentToken), 'The environment token must not be copied into the CMS form or advanced settings');
+  const cmsToken = 'Test_Public_CMS-456';
+  assert.equal((await admin.post('/admin/settings', { googleSiteVerification: cmsToken }, csrf)).status, 303);
+  let html = await (await client.request('/')).text();
+  assert.deepEqual(html.match(/<meta\b[^>]*\bname="google-site-verification"[^>]*>/g), ['<meta name="google-site-verification" content="' + cmsToken + '">']);
+  assert.ok(!html.includes(environmentToken), 'A valid CMS value must override a different valid environment value');
+  process.env.GOOGLE_SITE_VERIFICATION = '<meta content="InjectedEnvironmentToken">';
+  html = await (await client.request('/')).text();
+  assert.ok(html.includes('<meta name="google-site-verification" content="' + cmsToken + '">'), 'A malformed environment value must not affect a valid CMS value');
+  assert.doesNotMatch(html, /InjectedEnvironmentToken/);
+  process.env.GOOGLE_SITE_VERIFICATION = environmentToken;
+  assert.equal((await admin.post('/admin/settings', { googleSiteVerification: '' }, csrf)).status, 303);
+  assert.equal(Object.hasOwn(app.locals.db.getSettings(), 'googleSiteVerification'), true);
+  assert.equal(app.locals.db.getSettings().googleSiteVerification, '');
+  assert.doesNotMatch(await (await client.request('/')).text(), /<meta\b[^>]*\bname="google-site-verification"/, 'Clearing in the CMS must disable the tag despite a valid environment fallback');
+  for (const value of [null, 42, true, [], { token: 'Test_Public_Object' }, 'invalid token', 'Test_Public\n', 'C'.repeat(257), '<meta content="InjectedCMSToken">']) {
+    app.locals.db.saveSettings({ googleSiteVerification: value });
+    const page = await client.request('/');
+    assert.equal(page.status, 200);
+    const pageHtml = await page.text();
+    assert.doesNotMatch(pageHtml, /<meta\b[^>]*\bname="google-site-verification"/, 'An invalid own CMS value must suppress the environment rather than use it');
+    assert.doesNotMatch(pageHtml, /InjectedCMSToken/);
   }
 });
 

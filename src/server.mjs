@@ -33,7 +33,9 @@ const baseURL=(req,settings)=>{
 };
 const absolute=(url,base)=>url?.startsWith('/')?base+url:url;
 function publicData(db) {
-  return {settings:db.getSettings(),services:db.list('services'),projects:db.list('projects'),
+  const settings=db.getSettings();
+  const googleSiteVerification=Object.hasOwn(settings,'googleSiteVerification')?settings.googleSiteVerification:process.env.GOOGLE_SITE_VERIFICATION;
+  return {settings,googleSiteVerification,services:db.list('services'),projects:db.list('projects'),
     comparisons:db.list('beforeAfter'),testimonials:db.list('testimonials'),
     posts:db.list('blog'),areas:db.list('areas'),categories:db.list('categories'),slides:db.list('slider'),offers:db.list('offers')};
 }
