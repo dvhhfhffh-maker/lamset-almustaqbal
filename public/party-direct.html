@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080a12">
+<title>تحدّي الأصحاب Direct 🔥</title>
+<style>
+:root{--bg:#080a12;--card:#111522ee;--line:#ffffff1c;--txt:#f7f7fb;--muted:#a7acc0;--p:#7c5cff;--b:#25a7ff;--ok:#31d69b;--orange:#ff9b42}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial;background:radial-gradient(circle at 90% 0,#321b66 0,transparent 30%),radial-gradient(circle at 0 35%,#073358 0,transparent 28%),var(--bg);color:var(--txt);min-height:100vh}button,input,select,textarea{font:inherit}.wrap{width:min(980px,100%);margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;gap:8px}.badge{padding:8px 12px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}.hero{text-align:center;padding:34px 10px}.logo{font-size:70px}.hero h1{font-size:clamp(34px,8vw,62px);margin:8px;background:linear-gradient(90deg,#fff,#b5a4ff,#72c7ff);-webkit-background-clip:text;color:transparent}.hero p,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:0 20px 70px #0006;backdrop-filter:blur(14px)}.field{width:100%;padding:14px;border-radius:15px;border:1px solid var(--line);background:#0b0f19;color:#fff;outline:none;margin:6px 0 12px}.btn{border:0;border-radius:15px;padding:14px 18px;color:#fff;font-weight:900;background:linear-gradient(135deg,var(--p),var(--b));cursor:pointer}.btn2{background:#151a28;border:1px solid var(--line)}.btn:disabled{opacity:.4}.players{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0}.player{padding:13px;border:1px solid var(--line);border-radius:16px;background:#0c101a}.ready{color:var(--ok)}.offline{opacity:.45}.code{font-size:36px;letter-spacing:7px;font-weight:900;color:#c6b9ff}.scorebar{display:flex;gap:8px;overflow:auto;margin-bottom:12px}.score{min-width:130px;background:#101522;padding:11px;border-radius:14px;border:1px solid var(--line)}.score.current{border-color:var(--orange);box-shadow:0 0 18px #ff9b4230}.game{display:grid;grid-template-columns:1.5fr .7fr;gap:14px}.prompt{text-align:center}.big{font-size:clamp(27px,5vw,46px);font-weight:900;margin:18px 0}.timer{font-size:27px;font-weight:900;color:#ffb14a}.options{display:grid;grid-template-columns:1fr 1fr;gap:10px}.chatlog{height:180px;overflow:auto;background:#090d16;border-radius:14px;padding:10px}.msg{padding:5px}.msg b{color:#a994ff}.chatrow{display:flex;gap:7px;margin-top:8px}.chatrow input{flex:1}.reacts{display:flex;gap:8px;flex-wrap:wrap}.react{font-size:23px;padding:7px 10px;border-radius:13px;background:#0c101a;border:1px solid var(--line);cursor:pointer}.hidden{display:none!important}.overlay{position:fixed;inset:0;background:#05070dcc;display:none;place-items:center;padding:20px;z-index:20}.overlay.show{display:grid}.pop{text-align:center;width:min(520px,100%)}.float{position:fixed;bottom:12%;font-size:70px;animation:fly 1.5s ease-out forwards;z-index:40;pointer-events:none}@keyframes fly{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-420px) rotate(20deg) scale(1.4);opacity:0}}.rank{padding:12px;border-bottom:1px solid var(--line)}.notice{padding:12px;border-radius:14px;background:#161b2a;border:1px solid var(--line);color:#c9cde0;margin-top:12px}
+@media(max-width:760px){.grid,.game,.players,.options{grid-template-columns:1fr}.wrap{padding:11px}.hero{padding:20px 8px}.chatlog{height:130px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><b>🔥 تحدّي الأصحاب Direct</b><span id="conn" class="badge">جاهز</span></div>
+  <section id="home">
+    <div class="hero"><div class="logo">🎮</div><h1>تحدّي الأصحاب</h1><p>نسخة مباشرة بين الأجهزة — لا تستخدم Railway.</p></div>
+    <div class="grid">
+      <div class="card"><h2>👑 إنشاء غرفة</h2>
+        <input id="cn" aria-label="اسم المضيف" class="field" maxlength="20" placeholder="اسمك">
+        <input id="rn" aria-label="اسم الغرفة" class="field" maxlength="24" placeholder="اسم الغرفة">
+        <select id="mode" class="field"><option value="mixed">🔥 التحدي الكبير</option><option value="question">🧠 جاوب أو تعاقب</option><option value="end">🔤 نهاية الحرف</option><option value="chain">⛓️ آخر حرف</option><option value="story">✍️ قصة بلا حرف</option></select>
+        <select id="target" class="field"><option value="5">الفوز عند 5 نقاط</option><option value="10">الفوز عند 10 نقاط</option></select>
+        <button id="createBtn" class="btn">إنشاء الغرفة 🚀</button>
+      </div>
+      <div class="card"><h2>🎯 دخول غرفة</h2>
+        <input id="jn" aria-label="اسم اللاعب المنضم" class="field" maxlength="20" placeholder="اسمك">
+        <input id="jc" aria-label="كود الغرفة" class="field" maxlength="5" placeholder="كود الغرفة">
+        <button id="joinBtn" class="btn">انضمام 🔥</button>
+        <div class="notice">إذا أرسل لك صديقك الرابط، سيظهر كود الغرفة تلقائيًا هنا.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="lobby" class="hidden">
+    <div class="card">
+      <h2 id="lt"></h2><div id="code" class="code"></div>
+      <div id="players" class="players"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="ready" class="btn btn2">أنا جاهز ✅</button><button id="start" class="btn hidden">ابدأ اللعبة 🔥</button><button id="share" class="btn btn2">📤 مشاركة</button></div>
+      <p id="ls" class="muted"></p>
+    </div>
+    <div class="card" style="margin-top:12px"><h3>💬 الدردشة</h3><div id="chat1" class="chatlog"></div><div class="chatrow"><input id="ci1" class="field" maxlength="120" placeholder="رسالة..."><button id="send1" class="btn btn2">إرسال</button></div></div>
+  </section>
+
+  <section id="game" class="hidden">
+    <div id="scores" class="scorebar"></div>
+    <div style="display:flex;justify-content:space-between"><div id="round"></div><div id="timer" class="timer">00:20</div></div>
+    <div class="game">
+      <div class="card prompt"><div id="turn" class="muted"></div><div id="kind" style="color:#9fb0ff;font-weight:900"></div><div id="pt" class="big"></div><div id="opts" class="options"></div><div id="textbox" class="hidden"><textarea id="ans" class="field" rows="5" placeholder="اكتب إجابتك..."></textarea><button id="submit" class="btn">إرسال</button></div><p id="wait" class="muted"></p></div>
+      <div>
+        <div class="card"><h3>😂 التفاعلات</h3><div id="reacts" class="reacts"><button class="react">😂</button><button class="react">🔥</button><button class="react">😈</button><button class="react">👏</button><button class="react">🤦</button><button class="react">💀</button></div></div>
+        <div class="card" style="margin-top:12px"><h3>💬 الدردشة</h3><div id="chat2" class="chatlog"></div><div class="chatrow"><input id="ci2" class="field" maxlength="120" placeholder="رسالة..."><button id="send2" class="btn btn2">➤</button></div></div>
+      </div>
+    </div>
+  </section>
+  <section id="results" class="hidden"><div class="card" style="text-align:center"><div style="font-size:82px">🏆</div><h1>النتيجة النهائية</h1><div id="winner" class="big"></div><div id="rank"></div><br><button id="again" class="btn">🔁 لعبة جديدة</button></div></section>
+</div>
+<div id="ov" class="overlay"><div class="card pop"><div id="ove" style="font-size:70px">😈</div><h2 id="ovt"></h2><h3 id="ovx" style="color:#ffb14a"></h3><p class="muted">اضغط لإغلاق</p></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const AV=["😎","🦁","🐼","🦊","🔥","😂"];
+const LETTERS="ابتثجحخدذرزسشصضطظعغفقكلمنهوي".split("");
+const QUESTIONS=[
+["ما هي عاصمة اليابان؟","طوكيو",["طوكيو","سيول","بكين","بانكوك"]],
+["كم عدد كواكب المجموعة الشمسية؟","8",["7","8","9","10"]],
+["ما أكبر محيط في العالم؟","المحيط الهادئ",["الأطلسي","الهندي","المحيط الهادئ","المتجمد"]],
+["ما الكوكب المعروف بالكوكب الأحمر؟","المريخ",["الزهرة","المريخ","المشتري","عطارد"]],
+["ما عاصمة السعودية؟","الرياض",["جدة","الرياض","مكة","الدمام"]],
+["كم ضلعًا للمثلث؟","3",["2","3","4","5"]],
+["أي عضو يضخ الدم؟","القلب",["الرئة","الكبد","القلب","المعدة"]],
+["كم دقيقة في الساعة؟","60",["30","45","60","90"]],
+["أي دولة تشتهر ببرج إيفل؟","فرنسا",["إيطاليا","فرنسا","إسبانيا","ألمانيا"]],
+["ما ناتج 9 × 7؟","63",["54","56","63","72"]],
+["ما عكس كلمة سريع؟","بطيء",["قوي","بطيء","قصير","هادئ"]],
+["كم شهرًا في السنة؟","12",["10","11","12","13"]],
+["أي حاسة نستخدمها لسماع الموسيقى؟","السمع",["البصر","السمع","الشم","اللمس"]],
+["أي قارة تقع فيها مصر؟","أفريقيا",["آسيا","أفريقيا","أوروبا","أمريكا"]],
+["ما أكبر كوكب في المجموعة الشمسية؟","المشتري",["الأرض","زحل","المشتري","نبتون"]],
+["صح أم خطأ: الماء يتجمد عند 0° مئوية.","صح",["صح","خطأ"]],
+["أي من هذه رياضة جماعية؟","كرة القدم",["الجري","السباحة","كرة القدم","رفع الأثقال"]],
+["ما الجهاز المستخدم لقياس درجة الحرارة؟","الترمومتر",["البوصلة","الترمومتر","المجهر","البارومتر"]],
+["أي حيوان يُعرف بملك الغابة؟","الأسد",["الأسد","الحصان","الفيل","الذئب"]],
+["من أسرع؟","الضوء",["الصوت","الضوء","متساويان","لا شيء"]]
+];
+const PUN=["قلّد أحد اللاعبين لمدة 30 ثانية 😂","تكلم بصوت طفل لجولة 👶","قم بـ10 Squats 💪","قل نكتة 😄","غنِّ مقطعًا قصيرًا 🎤","ابقَ صامتًا حتى دورك القادم 🤐","مثّل شخصية مشهورة 20 ثانية 🎭","تحدث بلهجة يختارها الأصدقاء 😎","اذكر 5 أسماء خلال 10 ثوانٍ ⏱️","قل جملة مضحكة يختارها أصدقاؤك 🤣","امشِ كأنك روبوت 20 ثانية 🤖","اذكر 3 أشياء تحبها بسرعة ⚡"];
+const WORDLIST=["كتاب","بيت","تفاحة","أسد","دجاج","قمر","بحر","نمر","سكر","سيارة","طائرة","مدرسة","جامعة","شجرة","ورد","باب","نافذة","هاتف","حاسوب","ماء","شمس","ليل","نهار","طريق","مدينة","رياضة","كرة","ملعب","صديق","قصة","علم","تاريخ","تقنية","ذكاء","لغز","سؤال","جواب","قلم","مكتب","كرسي","غرفة","مطار","قطار","سفينة","جبل","وادي","صحراء","حديقة","برتقال","موز","عنب","تفاح","رمان","خبز","حليب","قهوة","شاي","نجم","سماء","سحاب","مطر","ريح","صوت","صورة","فيديو","لعبة","فريق","هدف","حارس","مدرب","لاعب","نهر","قارب","زهرة","طائر","سمك","حوت","عصفور","منزل","شارع","جسر","مكتبة","معلم","طالب","درس","ورقة"];
+const norm=s=>String(s||"").trim().replace(/[ًٌٍَُِّْـ]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي");
+const WORDS=new Set(WORDLIST.map(norm));
+const first=s=>norm(s)[0]||"";
+const last=s=>{const n=norm(s),c=n[n.length-1]||"";return c==="ة"?"ت":c};
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const safe=(s,n=24)=>String(s||"").trim().slice(0,n);
+const code5=()=>{const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let c="";for(let i=0;i<5;i++)c+=pick(chars);return c};
+const peerOptions={
+  host:"0.peerjs.com",port:443,path:"/",secure:true,debug:1,
+  config:{iceServers:[
+    {urls:"stun:stun.l.google.com:19302"},
+    {urls:"stun:freestun.net:3478"},
+    {urls:"turn:freestun.net:3478",username:"free",credential:"free"}
+  ],sdpSemantics:"unified-plan"}
+};
+let peer=null,hostConn=null,isHost=false,myId=null,room=null,tick=null,turnTimer=null,seq=0,lastSeq=0;
+const conns=new Map(),usedQ=new Set(),usedPun=new Set(),usedWords=new Set();
+
+function setStatus(t){$("conn").textContent=t}
+function show(section){["home","lobby","game","results"].forEach(x=>$(x).classList.toggle("hidden",x!==section))}
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function publicRoom(){return JSON.parse(JSON.stringify(room))}
+function broadcast(m){for(const c of conns.values())if(c.open)try{c.send(m)}catch{}}
+function state(){if(isHost){broadcast({type:"state",state:publicRoom()});render()}}
+function event(kind,title,text=""){seq++;const e={kind,title,text,seq,at:Date.now()};broadcast({type:"event",event:e});handleEvent(e);state()}
+function player(){return room?.players.find(p=>p.id===myId)}
+
+function buildPeer(id,onOpen){
+  if(typeof Peer==="undefined"){setStatus("مكتبة الاتصال لم تُحمّل 🔴");alert("تعذر تحميل نظام الاتصال. افتح الرابط في Chrome أو Safari.");return}
+  peer=new Peer(id,peerOptions);
+  peer.on("open",pid=>{myId=pid;setStatus("متصل 🟢");onOpen(pid)});
+  peer.on("connection",c=>{if(isHost)attach(c);else c.close()});
+  peer.on("disconnected",()=>{setStatus("إعادة اتصال...");setTimeout(()=>{try{peer.reconnect()}catch{}},800)});
+  peer.on("error",err=>{console.error(err);if(err.type==="unavailable-id"&&isHost){setTimeout(createRoom,100)}else{setStatus("خطأ اتصال 🔴");alert("تعذر الاتصال: "+(err.type||err.message||"غير معروف"))}});
+}
+function createRoom(){
+  if(peer&&!peer.destroyed)peer.destroy();
+  isHost=true;const code=code5(),name=safe($("cn").value)||"المضيف";
+  setStatus("إنشاء الغرفة...");
+  buildPeer("party-"+code.toLowerCase(),pid=>{
+    room={code,name:safe($("rn").value)||"غرفة الأصدقاء",hostId:pid,phase:"lobby",mode:$("mode").value,targetScore:Number($("target").value)||5,maxRounds:10,round:0,current:0,ends:null,prompt:null,chat:[],players:[{id:pid,name,avatar:pick(AV),score:0,ready:false,online:true}]};
+    render();
+  });
+}
+function joinRoom(){
+  const code=safe($("jc").value,5).toUpperCase(),name=safe($("jn").value)||"لاعب";
+  if(code.length!==5)return alert("أدخل كود الغرفة من 5 أحرف.");
+  if(peer&&!peer.destroyed)peer.destroy();
+  isHost=false;setStatus("دخول الغرفة...");
+  buildPeer(undefined,()=>{
+    hostConn=peer.connect("party-"+code.toLowerCase(),{reliable:true,serialization:"json",metadata:{name}});
+    let opened=false;
+    const timeout=setTimeout(()=>{if(!opened){setStatus("تعذر الوصول للمضيف 🔴");alert("لم يتم الوصول للغرفة. تأكد أن المضيف فاتح اللعبة وأن الكود صحيح.");}},12000);
+    hostConn.on("open",()=>{opened=true;clearTimeout(timeout);hostConn.send({type:"join",name})});
+    hostConn.on("data",handleGuest);
+    hostConn.on("close",()=>{setStatus("المضيف انقطع 🔴");alert("انقطع اتصال المضيف.")});
+    hostConn.on("error",e=>{console.error(e);setStatus("خطأ اتصال 🔴")});
+  });
+}
+function attach(c){
+  conns.set(c.peer,c);
+  c.on("data",m=>handleHost(c,m));
+  c.on("close",()=>{conns.delete(c.peer);const p=room?.players.find(x=>x.id===c.peer);if(p){p.online=false;state()}});
+}
+function handleHost(c,m){
+  if(!room||!m)return;
+  if(m.type==="join"){
+    if(room.phase!=="lobby")return c.send({type:"error",message:"اللعبة بدأت بالفعل."});
+    if(room.players.length>=4)return c.send({type:"error",message:"الغرفة ممتلئة."});
+    if(room.players.some(p=>p.id===c.peer))return;
+    const p={id:c.peer,name:safe(m.name)||"لاعب",avatar:pick(AV),score:0,ready:false,online:true};
+    room.players.push(p);c.send({type:"joined",id:c.peer,state:publicRoom()});event("info",p.name+" انضم 🎮");return;
+  }
+  const p=room.players.find(x=>x.id===c.peer);if(!p)return;
+  if(m.type==="ready"){p.ready=!p.ready;state()}
+  else if(m.type==="answer")hostAnswer(p,m.value);
+  else if(m.type==="chat")hostChat(p,m.text);
+  else if(m.type==="reaction")hostReaction(p,m.emoji);
+}
+function handleGuest(m){
+  if(!m)return;
+  if(m.type==="joined"){myId=m.id;room=m.state;setStatus("متصل 🟢");render()}
+  else if(m.type==="state"){room=m.state;render()}
+  else if(m.type==="event")handleEvent(m.event);
+  else if(m.type==="reaction")floatEmoji(m.emoji);
+  else if(m.type==="error")alert(m.message);
+}
+function action(type,data={}){
+  if(isHost){
+    const p=player();if(!p)return;
+    if(type==="ready"){p.ready=!p.ready;state()}
+    else if(type==="answer")hostAnswer(p,data.value);
+    else if(type==="chat")hostChat(p,data.text);
+    else if(type==="reaction")hostReaction(p,data.emoji);
+  }else if(hostConn?.open)hostConn.send({type,...data});
+  else alert("الاتصال بالغرفة غير جاهز.");
+}
+function canStart(){return isHost&&room?.players.length>=2&&room.players.every(p=>p.ready&&p.online)}
+function startGame(){
+  if(!canStart())return;
+  usedQ.clear();usedPun.clear();usedWords.clear();room.players.forEach(p=>p.score=0);
+  room.phase="playing";room.round=1;room.current=0;room.prompt=null;event("info","بدأ التحدي 🔥");setTimeout(startTurn,650);
+}
+function nextQuestion(){let a=QUESTIONS.map((_,i)=>i).filter(i=>!usedQ.has(i));if(!a.length){usedQ.clear();a=QUESTIONS.map((_,i)=>i)}const i=pick(a);usedQ.add(i);return{kind:"question",idx:i,text:QUESTIONS[i][0],options:QUESTIONS[i][2]}}
+function nextPun(){let a=PUN.map((_,i)=>i).filter(i=>!usedPun.has(i));if(!a.length){usedPun.clear();a=PUN.map((_,i)=>i)}const i=pick(a);usedPun.add(i);return PUN[i]}
+function makePrompt(){let k=room.mode==="mixed"?pick(["question","end","chain","story"]):room.mode;if(k==="question")return nextQuestion();if(k==="end")return{kind:"end",letter:pick(LETTERS)};if(k==="chain"){const w=pick(WORDLIST);usedWords.add(norm(w));return{kind:"chain",previous:w,letter:last(w)}}return{kind:"story",letter:pick(LETTERS)}}
+function startTurn(){
+  if(!isHost||room.phase!=="playing")return;
+  clearTimeout(turnTimer);room.prompt=makePrompt();room.ends=Date.now()+20000;const rr=room.round,cc=room.current;
+  turnTimer=setTimeout(()=>{if(room.phase!=="playing"||room.round!==rr||room.current!==cc)return;event("pun","انتهى الوقت ⏰",nextPun());setTimeout(advance,2200)},20100);state();
+}
+function finishCheck(){if(Math.max(...room.players.map(p=>p.score))>=room.targetScore||room.round>room.maxRounds){clearTimeout(turnTimer);room.phase="finished";room.ends=null;room.prompt=null;state();return true}return false}
+function advance(){if(!isHost||room.phase!=="playing")return;clearTimeout(turnTimer);room.current=(room.current+1)%room.players.length;if(room.current===0)room.round++;if(finishCheck())return;startTurn()}
+function hostAnswer(p,v){
+  if(!isHost||room.phase!=="playing"||room.players[room.current]?.id!==p.id)return;
+  clearTimeout(turnTimer);const q=room.prompt;let ok=false,title="";
+  if(q.kind==="question"){ok=Number.isInteger(v)&&QUESTIONS[q.idx][2][v]===QUESTIONS[q.idx][1];title=ok?"إجابة صحيحة 🎉":"إجابة خاطئة 😈"}
+  else if(q.kind==="end"){const w=norm(v);ok=WORDS.has(w)&&last(w)===norm(q.letter)&&!usedWords.has(w);if(ok)usedWords.add(w);title=ok?"كلمة صحيحة ✅":"الكلمة غير صحيحة أو مكررة"}
+  else if(q.kind==="chain"){const w=norm(v);ok=WORDS.has(w)&&first(w)===norm(q.letter)&&!usedWords.has(w);if(ok)usedWords.add(w);title=ok?"سلسلة صحيحة ✅":"الكلمة لا تبدأ بالحرف المطلوب أو مكررة"}
+  else{const s=String(v||"").trim(),n=norm(s),count=[...n].filter(c=>c===norm(q.letter)).length,wc=s.split(/\s+/).filter(Boolean).length;ok=count===0&&wc>=5;title=ok?"القصة اجتازت فحص الحرف ✅":count?"وجدنا الحرف المحظور "+count+" مرة ❌":"القصة قصيرة جدًا"}
+  if(ok){p.score++;event("ok",title,"+1 نقطة");if(finishCheck())return;setTimeout(advance,1400)}
+  else{event("pun",title,nextPun());setTimeout(advance,2300)}
+}
+function hostChat(p,text){const t=safe(text,120);if(!t)return;room.chat.push({name:p.name,text:t,at:Date.now()});if(room.chat.length>60)room.chat.shift();state()}
+function hostReaction(p,emoji){const e=["😂","🔥","😈","👏","🤦","💀"].includes(emoji)?emoji:"😂";broadcast({type:"reaction",emoji:e,from:p.name});floatEmoji(e)}
+
+function render(){if(!room)return;if(room.phase==="lobby"){show("lobby");renderLobby()}else if(room.phase==="playing"){show("game");renderGame()}else{show("results");renderResults()}renderChats()}
+function renderLobby(){
+  $("lt").textContent="🔥 "+room.name;$("code").textContent=room.code;
+  $("players").innerHTML=room.players.map(p=>'<div class="player '+(!p.online?'offline':'')+'"><b>'+p.avatar+' '+(p.id===room.hostId?'👑 ':'')+esc(p.name)+'</b><div class="'+(p.ready?'ready':'')+'">'+(p.online?(p.ready?'READY ✅':'غير جاهز'):'Offline')+'</div></div>').join("");
+  const mine=player();$("ready").textContent=mine?.ready?"إلغاء الجاهزية":"أنا جاهز ✅";$("start").classList.toggle("hidden",!isHost);$("start").disabled=!canStart();$("ls").textContent=canStart()?"الجميع جاهز! ابدأ 🔥":"ينتظر جاهزية اللاعبين...";
+}
+function renderGame(){
+  $("round").textContent="الجولة "+room.round+" / "+room.maxRounds;$("scores").innerHTML=room.players.map((p,i)=>'<div class="score '+(i===room.current?'current':'')+'"><b>'+p.avatar+' '+esc(p.name)+'</b><div>'+p.score+' نقطة</div></div>').join("");
+  const cp=room.players[room.current],mine=cp?.id===myId,p=room.prompt||{};$("turn").textContent=mine?"🔥 دورك الآن":"الدور على "+(cp?.name||"");$("opts").innerHTML="";$("textbox").classList.add("hidden");$("wait").textContent=mine?"":"انتظر دورك...";
+  if(p.kind==="question"){$("kind").textContent="🧠 سؤال";$("pt").textContent=p.text;if(mine)p.options.forEach((o,i)=>{const b=document.createElement("button");b.className="btn btn2";b.textContent=o;b.onclick=()=>action("answer",{value:i});$("opts").appendChild(b)})}
+  else if(p.kind==="end"){$("kind").textContent="🔤 نهاية الحرف";$("pt").textContent="اكتب كلمة تنتهي بحرف: "+p.letter;if(mine)$("textbox").classList.remove("hidden")}
+  else if(p.kind==="chain"){$("kind").textContent="⛓️ آخر حرف";$("pt").textContent="بعد «"+p.previous+"» — كلمة تبدأ بـ "+p.letter;if(mine)$("textbox").classList.remove("hidden")}
+  else if(p.kind==="story"){$("kind").textContent="✍️ قصة بلا حرف";$("pt").textContent="اكتب قصة قصيرة بدون حرف: "+p.letter;if(mine)$("textbox").classList.remove("hidden")}
+  runTimer();
+}
+function runTimer(){clearInterval(tick);const f=()=>{const s=Math.max(0,Math.ceil((((room&&room.ends)||Date.now())-Date.now())/1000));$("timer").textContent="00:"+String(s).padStart(2,"0")};f();tick=setInterval(f,250)}
+function renderChats(){const h=(room?.chat||[]).map(m=>'<div class="msg"><b>'+esc(m.name)+':</b> '+esc(m.text)+'</div>').join("");["chat1","chat2"].forEach(id=>{const e=$(id);if(e){e.innerHTML=h;e.scrollTop=e.scrollHeight}})}
+function handleEvent(e){if(!e||e.seq<=lastSeq)return;lastSeq=e.seq;if(e.kind==="pun")popup("😈",e.title,e.text);else if(e.kind==="ok")popup("✅",e.title,e.text);else popup("ℹ️",e.title,e.text)}
+function popup(a,b,c){$("ove").textContent=a;$("ovt").textContent=b||"";$("ovx").textContent=c||"";$("ov").classList.add("show");setTimeout(()=>$("ov").classList.remove("show"),2200)}
+function floatEmoji(x){const d=document.createElement("div");d.className="float";d.textContent=x;d.style.left=(15+Math.random()*70)+"%";document.body.appendChild(d);setTimeout(()=>d.remove(),1600)}
+function renderResults(){clearInterval(tick);const r=[...room.players].sort((a,b)=>b.score-a.score);$("winner").textContent=r[0]?r[0].avatar+" "+r[0].name+" — "+r[0].score+" نقطة":"";$("rank").innerHTML=r.map((p,i)=>'<div class="rank">'+(["🥇","🥈","🥉"][i]||"🎮")+" "+esc(p.name)+" — "+p.score+"</div>").join("")}
+async function shareRoom(){const url=location.href.split("?")[0]+"?room="+room.code,text="انضم إلى غرفتي في تحدّي الأصحاب 🎮\nالكود: "+room.code+"\n"+url;if(navigator.share){try{await navigator.share({title:"تحدّي الأصحاب",text,url})}catch{}}else{try{await navigator.clipboard.writeText(text);alert("تم نسخ الرابط ✅")}catch{prompt("انسخ الرابط:",text)}}}
+function sendChat(id){const el=$(id),t=el.value.trim();if(t){action("chat",{text:t});el.value=""}}
+
+$("createBtn").onclick=createRoom;$("joinBtn").onclick=joinRoom;$("ready").onclick=()=>action("ready");$("start").onclick=startGame;$("share").onclick=shareRoom;$("submit").onclick=()=>{const v=$("ans").value.trim();if(v){action("answer",{value:v});$("ans").value=""}};$("send1").onclick=()=>sendChat("ci1");$("send2").onclick=()=>sendChat("ci2");$("again").onclick=()=>location.href=location.href.split("?")[0];$("ov").onclick=()=>$("ov").classList.remove("show");$("reacts").addEventListener("click",e=>{if(e.target.classList.contains("react"))action("reaction",{emoji:e.target.textContent})});["ci1","ci2"].forEach(id=>$(id).addEventListener("keydown",e=>{if(e.key==="Enter")sendChat(id)}));
+const invite=new URLSearchParams(location.search).get("room");if(invite)$("jc").value=invite.toUpperCase();
+</script>
+</body></html>
