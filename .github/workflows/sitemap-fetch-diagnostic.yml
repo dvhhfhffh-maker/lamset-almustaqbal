@@ -1,0 +1,71 @@
+name: Sitemap fetch diagnostic
+on:
+  push:
+    branches: [diagnostics/sitemap-fetch-20261005-ua]
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Inspect six public GET responses
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { spawnSync } from 'node:child_process';
+          const ORIGIN='https://lamset-almustaqbal-production.up.railway.app';
+          const PATHS=new Set(['/sitemap.xml','/robots.txt','/']);
+          const xmlProbe="import sys,json,xml.etree.ElementTree as ET\nfrom urllib.parse import urlsplit\nfrom datetime import datetime\ntry:\n    root=ET.fromstring(sys.stdin.read())\n    namespace=root.tag[1:].split(\"}\")[0] if root.tag.startswith(\"{\") else \"\"\n    local=root.tag.split(\"}\")[-1]\n    locs=[(node.text or \"\").strip() for node in root.iter() if node.tag.split(\"}\")[-1]==\"loc\"]\n    lastmods=[(node.text or \"\").strip() for node in root.iter() if node.tag.split(\"}\")[-1]==\"lastmod\"]\n    invalid_dates=[]\n    for value in lastmods:\n        try: datetime.fromisoformat(value.replace(\"Z\",\"+00:00\"))\n        except ValueError: invalid_dates.append(value)\n    origins=sorted(set(urlsplit(value).scheme+\"://\"+urlsplit(value).netloc for value in locs))\n    print(json.dumps({\"xmlParsed\":True,\"root\":local,\"namespace\":namespace,\"sitemapNamespaceValid\":namespace==\"http://www.sitemaps.org/schemas/sitemap/0.9\",\"locCount\":len(locs),\"uniqueLocCount\":len(set(locs)),\"locOrigins\":origins,\"nonHttpsLocCount\":sum(urlsplit(value).scheme!=\"https\" for value in locs),\"lastmodCount\":len(lastmods),\"invalidLastmodCount\":len(invalid_dates),\"locSample\":locs[:3]},ensure_ascii=False))\nexcept ET.ParseError as error:\n    print(json.dumps({\"xmlParsed\":False,\"xmlParseError\":str(error)}))";
+          const userAgents=[
+            ['Chrome','Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'],
+            ['Googlebot','Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)']
+          ];
+          const decode=value=>String(value).replace(/&(?:amp|quot|apos|lt|gt);/g,v=>({'&amp;':'&','&quot;':'"','&apos;':"'",'&lt;':'<','&gt;':'>'}[v]));
+          const attrs=source=>Object.fromEntries([...source.matchAll(/([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)].map(m=>[m[1].toLowerCase(),decode(m[2]??m[3]??m[4]??'')]));
+          function allowed(value) {const u=new URL(value);return u.origin===ORIGIN&&u.protocol==='https:'&&PATHS.has(u.pathname)&&!u.search&&!u.hash&&!u.username&&!u.password;}
+          async function get(path,ua) {
+            let url=ORIGIN+path;const chain=[];
+            for(let hop=0;hop<6;hop++) {
+              if(!allowed(url))return {chain,error:'Redirect leaves the three allowed HTTPS endpoints'};
+              const response=await fetch(url,{method:'GET',redirect:'manual',credentials:'omit',signal:AbortSignal.timeout(25000),headers:{'User-Agent':ua,'Accept':'*/*'}});
+              const safeHeaders=Object.fromEntries(['content-type','content-length','content-encoding','cache-control','date','server','x-robots-tag','vary','x-railway-request-id'].map(name=>[name,response.headers.get(name)]).filter(([,value])=>value!==null));
+              const entry={url,status:response.status,headers:safeHeaders};chain.push(entry);
+              if([301,302,303,307,308].includes(response.status)) {const location=response.headers.get('location');await response.body?.cancel();if(!location)return {chain,error:'Redirect missing Location'};url=new URL(location,url).href;entry.location=url;continue;}
+              const reader=response.body?.getReader(),decoder=new TextDecoder();let body='',bytes=0;
+              if(reader)while(true) {const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>2*1024*1024){await reader.cancel();return {chain,error:'Response exceeds 2 MiB limit'};}body+=decoder.decode(part.value,{stream:true});}
+              body+=decoder.decode();return {chain,finalUrl:url,status:response.status,body,bytes,headers:safeHeaders};
+            }
+            return {chain,error:'Redirect limit reached'};
+          }
+          const rows=[];
+          for(const [uaLabel,ua] of userAgents)for(const path of ['/sitemap.xml','/robots.txt','/']) {
+            try {
+              const response=await get(path,ua);
+              const row={userAgent:uaLabel,path,requestedUrl:ORIGIN+path,chain:response.chain,finalUrl:response.finalUrl,status:response.status,decodedBytes:response.bytes,bodySha256:response.body?createHash('sha256').update(response.body).digest('hex'):null,error:response.error};
+              if(response.body!==undefined && path==='/sitemap.xml') {
+                const parsed=spawnSync('python3',['-c',xmlProbe],{input:response.body,encoding:'utf8',timeout:10000,maxBuffer:12000});
+                try{row.xml=JSON.parse(parsed.stdout);}catch{row.xml={xmlParsed:false,parserError:parsed.error?.message||'XML parser produced no JSON'};}
+              }
+              if(response.body!==undefined && path==='/robots.txt') {
+                row.robotsLines=response.body.split(/\r?\n/).map(v=>v.trim()).filter(Boolean).slice(0,30);
+                row.declaredSitemaps=response.body.split(/\r?\n/).filter(v=>/^\s*sitemap:/i.test(v)).map(v=>v.slice(v.indexOf(':')+1).trim());
+              }
+              if(response.body!==undefined && path==='/') {
+                row.htmlDocument=/<!doctype\s+html|<html\b/i.test(response.body);
+                const verification=[...response.body.matchAll(/<meta\b([^>]*)>/gi)].map(m=>attrs(m[1])).filter(m=>(m.name||'').toLowerCase()==='google-site-verification').map(m=>m.content||'');
+                row.verification={count:verification.length,tokens:verification.map(token=>({length:token.length,validCharset:!!token&&!/[^A-Za-z0-9_-]/.test(token),sha256:createHash('sha256').update(token).digest('hex')}))};
+                row.canonical=[...response.body.matchAll(/<link\b([^>]*)>/gi)].map(m=>attrs(m[1])).filter(m=>(m.rel||'').toLowerCase().split(/\s+/).includes('canonical')).map(m=>m.href);
+              }
+              rows.push(row);console.log('FETCH_DIAGNOSTIC='+JSON.stringify(row));
+            } catch(error) {const row={userAgent:uaLabel,path,requestedUrl:ORIGIN+path,error:error.message,cause:error.cause?.code||error.cause?.message};rows.push(row);console.log('FETCH_DIAGNOSTIC='+JSON.stringify(row));}
+          }
+          const ordinary=rows.filter(r=>r.userAgent==='Chrome'),googlebot=rows.filter(r=>r.userAgent==='Googlebot');
+          const equivalent=ordinary.map(a=>{const b=googlebot.find(r=>r.path===a.path);return {path:a.path,sameStatus:a.status===b?.status,sameContentType:a.chain?.at(-1)?.headers['content-type']===b?.chain?.at(-1)?.headers['content-type'],sameXML:a.path==='/sitemap.xml'?JSON.stringify(a.xml)===JSON.stringify(b?.xml):undefined,sameRobots:a.path==='/robots.txt'?a.bodySha256===b?.bodySha256:undefined,sameVerification:a.path==='/'?JSON.stringify(a.verification)===JSON.stringify(b?.verification):undefined};});
+          console.log('FETCH_DIAGNOSTIC_SUMMARY='+JSON.stringify({getSequences:rows.length,equivalent,limitation:'A spoofed Googlebot User-Agent tests response differences only; it does not verify access from Google crawler IPs.'}));
+          process.exitCode=rows.some(row=>row.error||row.status!==200||(row.path==='/sitemap.xml'&&!row.xml?.xmlParsed))?1:0;
+          NODE
