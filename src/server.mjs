@@ -151,7 +151,7 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
     res.type('text').send('User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /uploads/requests\nSitemap: '+base+'/sitemap.xml\n');
   });
   app.get('/sitemap.xml',(req,res)=>{
-    const base=baseURL(req,res.locals.settings).replace(/\\/$/,'');
+    const base=baseURL(req,res.locals.settings);
     const urls=['/','/services','/projects','/before-after','/about','/testimonials','/blog','/quote','/contact'].map(path=>({path}));
     for(const [collection,prefix] of [['services','/services/'],['projects','/projects/'],['blog','/blog/'],['areas','/riyadh/']]) {
       for(const item of db.list(collection)) {
@@ -164,11 +164,11 @@ export async function createApp({databasePath=process.env.DATABASE_PATH||resolve
       ...urls.map(url=>{
         const loc=xml(base+(url.path==='/'?'':url.path));
         const lastmod=url.date?String(url.date).slice(0,10):'';
-        return '  <url>\\n    <loc>'+loc+'</loc>'+(lastmod?'\\n    <lastmod>'+xml(lastmod)+'</lastmod>':'')+'\\n  </url>';
+        return '  <url>\n    <loc>'+loc+'</loc>'+(lastmod?'\n    <lastmod>'+xml(lastmod)+'</lastmod>':'')+'\n  </url>';
       }),
       '</urlset>',
       ''
-    ].join('\\n');
+    ].join('\n');
     res.status(200)
       .set('Content-Type','application/xml; charset=utf-8')
       .set('Cache-Control','public, max-age=300')
