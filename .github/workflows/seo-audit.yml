@@ -1,0 +1,250 @@
+name: Public SEO audit
+on:
+  push:
+    branches: [audit/new-domain-seo]
+permissions:
+  contents: read
+concurrency:
+  group: public-seo-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Audit public crawlability with read-only requests
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawnSync } from 'node:child_process';
+          const ORIGIN = 'https://lamset.up.railway.app';
+          const OLD_HOST = 'lamset-almustaqbal-production.up.railway.app';
+          const findings = [], pages = [], links = new Map(), formPaths = new Set(['/quote', '/contact']), homeAssets = new Set(), sitemapResponses = [], assetResults = [];
+          const add = (level, path, check) => findings.push({level, path, check});
+          const decode = value => String(value).replace(/&(?:#(x[\da-f]+|\d+)|([a-z]+));/gi, (all, num, name) => {
+            if (num) { const cp = num[0].toLowerCase() === 'x' ? parseInt(num.slice(1),16) : Number(num); return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : all; }
+            return ({amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' '})[name.toLowerCase()] ?? all;
+          });
+          const attrs = source => Object.fromEntries([...source.matchAll(/([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)].map(m => [m[1].toLowerCase(),decode(m[2] ?? m[3] ?? m[4] ?? '')]));
+          const textContent = value => decode(value.replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim();
+          const tags = (html, name) => [...html.matchAll(new RegExp('<'+name+'\\b([^>]*)>','gi'))].map(m=>attrs(m[1]));
+          const normalize = value => { const u=new URL(value); return u.origin+(u.pathname==='/'?'':u.pathname)+u.search; };
+          function allowed(value) {
+            try {
+              const u=new URL(value), path=decodeURIComponent(u.pathname);
+              return u.origin===ORIGIN && u.protocol==='https:' && !u.username && !u.password && !u.search && !u.hash &&
+                !/^\/(?:admin|api|uploads\/requests)(?:\/|$)/i.test(path) &&
+                !/(?:^|\/)(?:logout|login|setup|delete|remove|destroy|reset|unsubscribe|submit)(?:\/|$)/i.test(path);
+            } catch { return false; }
+          }
+          function allowedAsset(value) {
+            try {const u=new URL(value);return /\.(?:css|js)$/i.test(u.pathname)&&!u.hash&&allowed(u.origin+u.pathname);}catch{return false;}
+          }
+          async function request(value, method='GET', read=true, asset=false) {
+            if (!['GET','HEAD'].includes(method)) throw new Error('Unsafe method');
+            let url=new URL(value).href, firstStatus, redirects=0;
+            for(let hop=0;hop<6;hop++) {
+              if(!(asset?allowedAsset(url):allowed(url))) throw new Error('Unsafe request target');
+              const response=await fetch(url,{method,redirect:'manual',credentials:'omit',signal:AbortSignal.timeout(20000),headers:{'User-Agent':'LamsetPublicSEOAudit/1.0','Accept':'text/html,application/xml,text/plain,*/*','Accept-Encoding':'gzip','Cache-Control':'no-cache','Pragma':'no-cache'}});
+              firstStatus ??= response.status;
+              if([301,302,303,307,308].includes(response.status)) {
+                const location=response.headers.get('location'); await response.body?.cancel();
+                if(!location) throw new Error('Redirect without destination');
+                url=new URL(location,url).href; redirects++; continue;
+              }
+              let body='';
+              if(read && method==='GET' && response.body) {
+                const reader=response.body.getReader(), decoder=new TextDecoder(); let bytes=0;
+                while(true) { const chunk=await reader.read(); if(chunk.done)break; bytes+=chunk.value.byteLength; if(bytes>2*1024*1024){await reader.cancel();throw new Error('Response exceeds audit size limit');} body+=decoder.decode(chunk.value,{stream:true}); }
+                body+=decoder.decode();
+              } else await response.body?.cancel();
+              return {status:response.status,firstStatus,redirects,url,body,headers:response.headers};
+            }
+            throw new Error('Redirect limit exceeded');
+          }
+          async function concurrent(values, run, limit=3) {
+            let next=0; await Promise.all(Array.from({length:Math.min(limit,values.length)},async()=>{while(next<values.length){const index=next++;await run(values[index]);}}));
+          }
+          function parseRobots(body) {
+            const groups=[], sitemaps=[]; let group=null,hasRules=false;
+            for(const raw of body.split(/\r?\n/)) {
+              const line=raw.split('#')[0].trim(), colon=line.indexOf(':'); if(colon<0)continue;
+              const key=line.slice(0,colon).trim().toLowerCase(),value=line.slice(colon+1).trim();
+              if(key==='sitemap'){sitemaps.push(value);continue;}
+              if(key==='user-agent') {
+                if(!group||hasRules){group={agents:[],rules:[]};groups.push(group);hasRules=false;} group.agents.push(value.toLowerCase());
+              } else if(group && ['allow','disallow'].includes(key)){hasRules=true;if(value)group.rules.push({allow:key==='allow',pattern:value});}
+            }
+            return {groups,sitemaps};
+          }
+          function robotsAllows(robots,agent,path) {
+            const score=g=>Math.max(-1,...g.agents.map(a=>a==='*'?0:agent.toLowerCase().includes(a)?a.length:-1));
+            const best=Math.max(-1,...robots.groups.map(score));
+            const rules=robots.groups.filter(g=>score(g)===best).flatMap(g=>g.rules);
+            const matches=rules.filter(r=>new RegExp('^'+r.pattern.split('*').map(v=>v.replace(/[.+?^{}()|[\]\\]/g,'\\$&')).join('.*').replace(/\\\$$/,'$')).test(path));
+            matches.sort((a,b)=>b.pattern.replace(/[*$]/g,'').length-a.pattern.replace(/[*$]/g,'').length||Number(b.allow)-Number(a.allow));
+            return matches[0]?.allow ?? true;
+          }
+          function schemaTypes(node,types=new Set()) {
+            if(Array.isArray(node)){for(const part of node)schemaTypes(part,types);}
+            else if(node&&typeof node==='object') { for(const type of Array.isArray(node['@type'])?node['@type']:[node['@type']])if(type)types.add(type); if(node['@graph'])schemaTypes(node['@graph'],types); }
+            return types;
+          }
+          function parseSitemapXML(body) {
+            const source = [
+              'import sys,json,xml.etree.ElementTree as ET',
+              "ns='http://www.sitemaps.org/schemas/sitemap/0.9'; q='{'+ns+'}'",
+              'root=ET.fromstring(sys.stdin.read())',
+              "kind=root.tag[len(q):] if root.tag.startswith(q) else ''",
+              "if kind not in ('urlset','sitemapindex'): raise ValueError('Invalid sitemap root or namespace')",
+              "entry='url' if kind=='urlset' else 'sitemap'",
+              'locations=[]',
+              'for item in root.findall(q+entry):',
+              "    locs=item.findall(q+'loc')",
+              "    if len(locs)!=1 or not (locs[0].text or '').strip(): raise ValueError('Invalid sitemap loc')",
+              "    locations.append(locs[0].text.strip())",
+              "if not locations: raise ValueError('Empty sitemap')",
+              "print(json.dumps({'type':kind,'locations':locations}))"
+            ].join('\n');
+            const parsed=spawnSync('python3',['-c',source],{input:body,encoding:'utf8',timeout:5000,maxBuffer:3*1024*1024});
+            if(parsed.error||parsed.status!==0)throw new Error('Invalid sitemap XML or namespace');
+            return JSON.parse(parsed.stdout);
+          }
+          function hasOldSchemaURL(node) {
+            if(typeof node==='string')return node.includes(OLD_HOST);
+            if(Array.isArray(node))return node.some(hasOldSchemaURL);
+            return !!node&&typeof node==='object'&&Object.values(node).some(hasOldSchemaURL);
+          }
+          let robots={groups:[],sitemaps:[]}, robotsResponse=null;
+          try {
+            const response=await request(ORIGIN+'/robots.txt');
+            robotsResponse={status:response.status,firstStatus:response.firstStatus,redirects:response.redirects,contentType:response.headers.get('content-type'),contentEncoding:response.headers.get('content-encoding')};
+            if(response.status!==200||response.firstStatus!==200)add('error','/robots.txt','HTTP '+response.firstStatus+' (final '+response.status+')');
+            if(!/^text\/plain(?:[;\s]|$)/i.test(response.headers.get('content-type')||''))add('error','/robots.txt','Expected text/plain');
+            robots=parseRobots(response.body);
+            if(!robots.sitemaps.includes(ORIGIN+'/sitemap.xml'))add('error','/robots.txt','Expected Sitemap directive for current origin');
+            for(const agent of ['*','Googlebot'])if(robotsAllows(robots,agent,'/admin'))add('error','/robots.txt','Admin allowed for '+agent);
+          } catch { add('error','/robots.txt','Fetch or parsing failed'); }
+          const sitemapURLs=new Set(),seenSitemaps=new Set();
+          async function readSitemap(value,depth=0) {
+            const path=(()=>{try{return new URL(value).pathname;}catch{return '/sitemap.xml';}})();
+            if(!allowed(value)){add('error',path,'Invalid or unsafe sitemap URL');return;}
+            if(seenSitemaps.has(value))return; seenSitemaps.add(value);
+            if(depth>5||seenSitemaps.size>30){add('error',path,'Sitemap recursion limit exceeded');return;}
+            try {
+              const response=await request(value); if(response.status!==200||response.firstStatus!==200){add('error',path,'Sitemap HTTP '+response.firstStatus);return;}
+              if(!/^(?:application|text)\/xml(?:[;\s]|$)/i.test(response.headers.get('content-type')||''))add('error',path,'Expected XML Content-Type');
+              let document;
+              try {document=parseSitemapXML(response.body);}catch{add('error',path,'Invalid sitemap XML or namespace');return;}
+              sitemapResponses.push({path,status:response.status,firstStatus:response.firstStatus,redirects:response.redirects,contentType:response.headers.get('content-type'),contentEncoding:response.headers.get('content-encoding'),xmlNamespaceValidated:true,entries:document.locations.length});
+              const locations=document.locations;
+              if(document.type==='sitemapindex'){for(const child of locations)await readSitemap(child,depth+1);}
+              else for(const page of locations) {
+                if(!allowed(page)){add('error',path,'Invalid or unsafe public URL in sitemap');continue;}
+                const normalizedPage=normalize(page);
+                if(sitemapURLs.has(normalizedPage))add('error',new URL(page).pathname,'Duplicate sitemap entry');
+                sitemapURLs.add(normalizedPage);
+              }
+            } catch { add('error',path,'Sitemap fetch failed'); }
+          }
+          const declarations=robots.sitemaps.length?robots.sitemaps:[ORIGIN+'/sitemap.xml'];
+          for(const sitemap of declarations)await readSitemap(sitemap);
+          if(sitemapURLs.size!==44)add('error','/sitemap.xml','Expected 44 unique public URLs; found '+sitemapURLs.size);
+          if(sitemapURLs.size>1000)throw new Error('Sitemap page limit exceeded; audit coverage incomplete');
+          await concurrent([...sitemapURLs],async value=>{
+            const path=new URL(value).pathname;
+            for(const agent of ['*','Googlebot'])if(!robotsAllows(robots,agent,path))add('error',path,'Public page blocked for '+agent);
+            try {
+              const response=await request(value);
+              if(response.status!==200||response.firstStatus!==200){add('error',path,'Public HTTP '+response.firstStatus+' (final '+response.status+')');return;}
+              if(!/^text\/html(?:[;\s]|$)/i.test(response.headers.get('content-type')||'')){add('error',path,'Expected HTML');return;}
+              const html=response.body,htmlAttrs=tags(html,'html')[0]||{},metas=tags(html,'meta');
+              const title=textContent(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'');
+              const descriptions=metas.filter(m=>m.name?.toLowerCase()==='description'),description=descriptions[0]?.content?.trim()||'';
+              const canonicals=tags(html,'link').filter(l=>(l.rel||'').toLowerCase().split(/\s+/).includes('canonical'));
+              const h1=[...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(m=>textContent(m[1]));
+              const directives=[response.headers.get('x-robots-tag')||'',...metas.filter(m=>['robots','googlebot'].includes((m.name||'').toLowerCase())).map(m=>m.content||'')].join(',');
+              const types=new Set(); let schemaCount=0;
+              for(const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(attrs(m[1]).type?.toLowerCase()==='application/ld+json') {
+                schemaCount++; try {const schema=JSON.parse(m[2]);schemaTypes(schema,types);if(hasOldSchemaURL(schema))add('error',path,'Old domain in JSON-LD');}catch{add('error',path,'Invalid JSON-LD');}
+              }
+              const lang=/^ar(?:-|$)/i.test(htmlAttrs.lang||''),rtl=htmlAttrs.dir?.toLowerCase()==='rtl';
+              if(!lang)add('error',path,'Arabic lang missing'); if(!rtl)add('error',path,'RTL missing');
+              if(h1.length!==1||!h1[0])add('error',path,'Expected one useful H1; found '+h1.length);
+              if(!title||!/[؀-ۿ]/u.test(title))add('error',path,'Useful Arabic title missing');
+              else if(title.length<15||title.length>90)add('warning',path,'Title length '+title.length);
+              if(descriptions.length!==1||!description)add('error',path,'Expected one meta description');
+              else if(description.length<50||description.length>180)add('warning',path,'Description length '+description.length);
+              let canonical=false;
+              try {canonical=canonicals.length===1&&allowed(canonicals[0].href)&&normalize(canonicals[0].href)===normalize(value);}catch{}
+              if(!canonical)add('error',path,'Canonical is not a single self URL');
+              const ogURLs=metas.filter(m=>m.property?.toLowerCase()==='og:url');
+              let ogSelf=false;
+              try {ogSelf=ogURLs.length===1&&allowed(ogURLs[0].content)&&normalize(ogURLs[0].content)===normalize(value);}catch{}
+              if(!ogSelf)add('error',path,'og:url is not a single self URL');
+              const googleVerified=metas.some(m=>m.name?.toLowerCase()==='google-site-verification'&&m.content?.trim());
+              if(!googleVerified)add('error',path,'Google verification meta missing');
+              const publicIndexable=!/(?:^|[\s,;:])(?:noindex|none)(?:$|[\s,;])/i.test(directives);
+              if(!publicIndexable)add('error',path,'Public noindex directive');
+              if(!types.has('LocalBusiness'))add('error',path,'LocalBusiness JSON-LD missing');
+              if(path!=='/'&&!types.has('BreadcrumbList'))add('error',path,'Breadcrumb JSON-LD missing');
+              if(/^\/services\/[^/]+\/?$/.test(path)&&!types.has('Service'))add('error',path,'Service JSON-LD missing');
+              if(/^\/blog\/[^/]+\/?$/.test(path)&&!types.has('Article'))add('error',path,'Article JSON-LD missing');
+              if(path==='/') {
+                const candidates=[...tags(html,'link').filter(t=>(t.rel||'').toLowerCase().split(/\s+/).includes('stylesheet')).map(t=>t.href),...tags(html,'script').map(t=>t.src)];
+                for(const href of candidates) {
+                  if(homeAssets.size>=4)break;
+                  try {const assetURL=new URL(href||'',response.url).href;if(allowedAsset(assetURL))homeAssets.add(assetURL);}catch{}
+                }
+              }
+              const images=tags(html,'img'),activeImages=images.filter(i=>i.src||i.srcset),missingAlt=activeImages.filter(i=>!Object.hasOwn(i,'alt')).length,emptyAlt=activeImages.filter(i=>Object.hasOwn(i,'alt')&&!i.alt.trim()&&i.role!=='presentation'&&i['aria-hidden']!=='true').length;
+              if(missingAlt)add('warning',path,'Images without alt: '+missingAlt); if(emptyAlt)add('warning',path,'Empty image alt needs decorative review: '+emptyAlt);
+              if([...tags(html,'img'),...tags(html,'script'),...tags(html,'iframe')].some(t=>/^http:/i.test(t.src||''))||tags(html,'link').some(t=>/^http:/i.test(t.href||'')))add('error',path,'HTTP asset on HTTPS page');
+              const visible=textContent(html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi,'').replace(/<head\b[^>]*>[\s\S]*?<\/head>/i,''));
+              if(visible.length<300)add('warning',path,'Visible content length '+visible.length);
+              let base=response.url; const baseTag=tags(html,'base')[0]?.href;
+              if(baseTag){try{const candidate=new URL(baseTag,base).href;if(allowed(candidate))base=candidate;else add('warning',path,'Unsafe base URL ignored');}catch{add('warning',path,'Invalid base URL');}}
+              for(const form of tags(html,'form')){try{const target=new URL(form.action||value,base);if(target.origin===ORIGIN)formPaths.add(target.pathname);}catch{}}
+              for(const a of tags(html,'a')) {
+                const href=(a.href||'').trim(); if(!href||href.startsWith('#')||/^(?:tel|mailto|javascript|data):/i.test(href))continue;
+                try {const target=new URL(href,base);target.hash='';if(allowed(target.href)){const item=links.get(target.href)||new Set();item.add(path);links.set(target.href,item);}}catch{add('warning',path,'Invalid anchor URL');}
+              }
+              pages.push({path,status:response.status,firstStatus:response.firstStatus,redirects:response.redirects,contentType:response.headers.get('content-type'),contentEncoding:response.headers.get('content-encoding'),xRobotsTag:response.headers.get('x-robots-tag'),lang,rtl,h1:h1.length,titleChars:title.length,descriptionChars:description.length,canonical,ogSelf,googleVerified,publicIndexable,schema:[...types].sort(),images:activeImages.length,inactiveImagePlaceholders:images.length-activeImages.length,missingAlt,emptyAlt,title,description});
+            } catch {add('error',path,'Public page fetch failed');}
+          });
+          let assetsChecked=0;
+          await concurrent([...homeAssets],async value=>{
+            const path=new URL(value).pathname;assetsChecked++;
+            try {const response=await request(value,'GET',false,true);assetResults.push({path,status:response.status,firstStatus:response.firstStatus,redirects:response.redirects});if(response.status!==200||response.firstStatus!==200)add('error',path,'Asset HTTP '+response.firstStatus+' (final '+response.status+')');}
+            catch {add('error',path,'Public asset fetch failed');}
+          });
+          if(pages.length!==44)add('error','/sitemap.xml','Expected 44 HTML pages checked; found '+pages.length);
+          const successful=new Map(pages.map(p=>[p.path,p]));
+          let checkedLinks=0,skippedFormLinks=0;
+          await concurrent([...links.keys()],async value=>{
+            const path=new URL(value).pathname;
+            if(formPaths.has(path)){skippedFormLinks++;return;}
+            checkedLinks++;
+            if(successful.has(path))return;
+            try {const response=await request(value,'HEAD',false);const result=response.status===405?await request(value,'GET',false):response;
+              if([404,410].includes(result.status))add('error',path,'Broken internal link HTTP '+result.status);
+              else if(result.status>=400)add('warning',path,'Internal link HTTP '+result.status);
+              if(result.redirects)add('warning',path,'Internal link redirects '+result.redirects+' hop(s)');
+            }catch{add('warning',path,'Internal link fetch failed');}
+          });
+          for(const field of ['title','description']) {
+            const groups=new Map(); for(const page of pages){const value=page[field];if(!value)continue;const group=groups.get(value)||[];group.push(page.path);groups.set(value,group);}
+            for(const group of groups.values())if(group.length>1)add('warning',group.join(' '),'Duplicate '+field+' across '+group.length+' pages');
+          }
+          const topLevelPaths=new Set(['/','/services','/projects','/before-after','/about','/testimonials','/blog','/quote','/contact']);
+          const topLevelPages=pages.filter(p=>topLevelPaths.has(p.path));
+          if(topLevelPages.length!==9)add('error','/','Expected all 9 top-level public pages');
+          const output={origin:ORIGIN,robotsResponse,sitemapResponses,xmlParser:'Python ElementTree',xmlNamespace:'http://www.sitemaps.org/schemas/sitemap/0.9',assetResults,expectedSitemapPages:44,assetsDiscovered:homeAssets.size,assetsChecked,sitemaps:seenSitemaps.size,sitemapPages:sitemapURLs.size,pagesChecked:pages.length,topLevelPagesChecked:topLevelPages.length,topLevelUniqueDescriptions:new Set(topLevelPages.map(p=>p.description)).size,uniqueTitles:new Set(pages.map(p=>p.title)).size,uniqueDescriptions:new Set(pages.map(p=>p.description)).size,imageSourcesChecked:pages.reduce((n,p)=>n+p.images,0),imagesMissingAlt:pages.reduce((n,p)=>n+p.missingAlt,0),imagesEmptyAlt:pages.reduce((n,p)=>n+p.emptyAlt,0),inactiveImagePlaceholders:pages.reduce((n,p)=>n+p.inactiveImagePlaceholders,0),internalLinksDiscovered:links.size,internalLinksChecked:checkedLinks,formLinkPathsSkipped:skippedFormLinks,errors:findings.filter(f=>f.level==='error').length,warnings:findings.filter(f=>f.level==='warning').length,indexing:'Crawlability audited only. Actual Google indexing and rankings require Search Console data.'};
+          console.log('SEO_AUDIT_SUMMARY='+JSON.stringify(output));
+          for(const {title,description,...page} of pages.sort((a,b)=>a.path.localeCompare(b.path)))console.log('SEO_PAGE='+JSON.stringify(page));
+          for(const finding of findings)console.log('SEO_FINDING='+JSON.stringify(finding));
+          process.exitCode=output.errors?1:0;
+          NODE
